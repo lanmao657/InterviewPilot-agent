@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.database import Base, engine
-from app.routers import auth, documents, interviews, prep_plans, questions, reports, streams
+from app.routers import assistant, auth, documents, interviews, prep_plans, questions, reports, streams
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
@@ -34,6 +34,7 @@ def health() -> dict[str, str]:
 
 
 app.include_router(auth.router, prefix=settings.api_prefix)
+app.include_router(assistant.router, prefix=settings.api_prefix)
 app.include_router(documents.router, prefix=settings.api_prefix)
 app.include_router(prep_plans.router, prefix=settings.api_prefix)
 app.include_router(questions.router, prefix=settings.api_prefix)

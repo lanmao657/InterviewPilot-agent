@@ -32,7 +32,8 @@ class AIAgent:
     async def stream_chat(self, system: str, user: str) -> AsyncGenerator[str, None]:
         if not self.settings.ai_api_key:
             for chunk in self._fallback(system, user).split("，"):
-                yield chunk + "，"
+                if chunk:
+                    yield chunk + "，"
             return
 
         payload = {
@@ -59,7 +60,7 @@ class AIAgent:
                         yield delta
 
     async def build_roadmap(self, resume_text: str, jd_text: str, target_role: str) -> dict:
-        prompt = f"候选人简历：{resume_text[:2500]}\n岗位JD：{jd_text[:2500]}\n目标岗位：{target_role}"
+        prompt = f"候选人简历：{resume_text[:2500]}\n岗位 JD：{jd_text[:2500]}\n目标岗位：{target_role}"
         content = await self._chat("你是中文 AI 面试教练，请输出简洁的准备路线。", prompt)
         return {
             "summary": content[:900],
@@ -72,7 +73,7 @@ class AIAgent:
             f"请结合 {focus} 讲一个最能体现你解决复杂问题的项目。",
             "如果面试官质疑你的项目影响力，你会如何用数据回应？",
             "描述一次你和团队意见不一致时的处理方式。",
-            "请解释你最近一个项目中的关键技术/业务取舍。",
+            "请解释你最近一个项目中的关键技术或业务取舍。",
             "如果入职后 30 天内要交付结果，你会如何拆解计划？",
             "你有哪些短板？最近如何系统改进？",
         ]
@@ -103,9 +104,26 @@ class AIAgent:
         joined = "\n".join(f"Q:{turn['question']}\nA:{turn['answer']}" for turn in turns)
         return await self._chat("你是面试复盘教练，请输出中文 STAR Feedback 报告。", f"{title}\n{joined[:6000]}")
 
+    async def coach_with_context(self, message: str, context: dict) -> str:
+        return await self._chat(self.assistant_system_prompt(), self.assistant_user_prompt(message, context))
+
+    async def stream_coach_with_context(self, message: str, context: dict) -> AsyncGenerator[str, None]:
+        async for chunk in self.stream_chat(self.assistant_system_prompt(), self.assistant_user_prompt(message, context)):
+            yield chunk
+
+    def assistant_system_prompt(self) -> str:
+        return (
+            "你是 InterviewPilot 的 AI 面试准备教练。你只能围绕求职面试准备提供帮助："
+            "简历与 JD 匹配、题库训练、模拟面试、STAR 表达、复盘报告和下一步行动。"
+            "回答要具体、可执行、中文优先；如果上下文不足，引导用户上传简历与 JD。"
+        )
+
+    def assistant_user_prompt(self, message: str, context: dict) -> str:
+        return f"用户问题：{message}\n\n当前用户上下文：\n{json.dumps(context, ensure_ascii=False, default=str)[:8000]}"
+
     def _fallback(self, system: str, user: str) -> str:
         return (
-            "这是 InterviewPilot 的本地模拟 AI 输出。建议优先围绕岗位要求梳理 3 个高匹配项目，"
-            "每个项目按 STAR 结构准备：背景、任务、行动、结果。回答时要给出指标、取舍和复盘，"
-            "并准备 2 个能展示学习速度和协作能力的追问素材。"
+            "这是 InterviewPilot 的本地模拟 AI 输出。建议先上传简历与 JD，生成准备计划后再开始题库训练。"
+            "如果已经有材料，可以优先选择 3 个最匹配岗位要求的项目，按 STAR 结构准备：背景、任务、行动、结果。"
+            "下一步建议：补齐岗位信息、生成 6 道高频题、完成一轮文字模拟面试，并用复盘报告修正表达。"
         )

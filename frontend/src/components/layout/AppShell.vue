@@ -1,8 +1,19 @@
 <script setup lang="ts">
-import { BarChart3, BookOpenCheck, FileText, Gauge, LogOut, MessageSquareText, Settings, UserCircle } from 'lucide-vue-next'
+import {
+  BarChart3,
+  BookOpenCheck,
+  Bot,
+  FileText,
+  Gauge,
+  LogOut,
+  MessageSquareText,
+  Settings,
+  UserCircle,
+} from 'lucide-vue-next'
 import { computed } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
+import GlobalAssistantWidget from '@/components/assistant/GlobalAssistantWidget.vue'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/stores/auth'
 
@@ -15,6 +26,7 @@ const navItems = [
   { label: '简历与 JD', path: '/documents', icon: FileText },
   { label: '题库', path: '/questions', icon: BookOpenCheck },
   { label: '模拟面试', path: '/interview', icon: MessageSquareText },
+  { label: 'AI 助手', path: '/assistant', icon: Bot },
   { label: '报告', path: '/reports', icon: BarChart3 },
   { label: '设置', path: '/settings', icon: Settings },
 ]
@@ -56,7 +68,7 @@ function logout() {
           <UserCircle class="text-muted-foreground" />
           <div class="min-w-0">
             <p class="truncate text-sm font-medium">{{ auth.user?.name }}</p>
-            <p class="truncate text-xs text-muted-foreground">{{ auth.user?.email }}</p>
+            <p class="truncate text-xs text-muted-foreground">{{ auth.user?.username }}</p>
           </div>
         </div>
         <Button variant="ghost" size="sm" class="mt-3 w-full justify-start" @click="logout">
@@ -73,15 +85,22 @@ function logout() {
             <p class="text-xs font-medium text-muted-foreground">InterviewPilot</p>
             <h1 class="text-xl font-semibold">{{ pageTitle }}</h1>
           </div>
-          <Button size="sm" @click="router.push('/interview')">
-            <MessageSquareText data-icon="inline-start" />
-            开始练习
-          </Button>
+          <div class="flex items-center gap-2">
+            <Button variant="outline" size="sm" @click="router.push('/assistant')">
+              <Bot data-icon="inline-start" />
+              AI 助手
+            </Button>
+            <Button size="sm" @click="router.push('/interview')">
+              <MessageSquareText data-icon="inline-start" />
+              开始练习
+            </Button>
+          </div>
         </div>
       </header>
       <div class="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
         <RouterView />
       </div>
     </main>
+    <GlobalAssistantWidget />
   </div>
 </template>

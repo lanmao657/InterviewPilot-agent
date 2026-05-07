@@ -1,4 +1,6 @@
 from app.models.domain import (
+    AssistantConversation,
+    AssistantMessage,
     Document,
     DocumentKind,
     InterviewSession,
@@ -11,6 +13,8 @@ from app.models.domain import (
 )
 
 __all__ = [
+    "AssistantConversation",
+    "AssistantMessage",
     "Document",
     "DocumentKind",
     "InterviewSession",

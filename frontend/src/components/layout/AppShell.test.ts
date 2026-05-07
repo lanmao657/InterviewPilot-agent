@@ -32,6 +32,7 @@ describe('AppShell', () => {
     expect(wrapper.text()).toContain('简历与 JD')
     expect(wrapper.text()).toContain('题库')
     expect(wrapper.text()).toContain('模拟面试')
+    expect(wrapper.text()).toContain('AI 助手')
     expect(wrapper.text()).toContain('报告')
     expect(wrapper.text()).toContain('设置')
   })
