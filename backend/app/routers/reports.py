@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -25,7 +27,8 @@ async def create_report(interview_id: int, user: User = Depends(get_current_user
         return existing
 
     turns = [{"question": turn.question, "answer": turn.answer, "score": turn.score} for turn in interview.turns]
-    content = await AIAgent().build_report(interview.title, turns)
+    report_data = await AIAgent().build_report(interview.title, turns, user_id=user.id)
+    content = report_data if isinstance(report_data, str) else json.dumps(report_data, ensure_ascii=False)
     scores = [turn.score for turn in interview.turns]
     report = Report(
         user_id=user.id,

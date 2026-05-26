@@ -31,12 +31,12 @@ async def answer_question(interview_id: int, payload: AnswerCreate, user: User =
     )
     if not interview or interview.user_id != user.id:
         raise HTTPException(status_code=404, detail="面试会话不存在")
-    scored = await AIAgent().score_answer(payload.question, payload.answer)
+    scored = await AIAgent().score_answer(payload.question, payload.answer, user_id=user.id)
     turn = InterviewTurn(
         interview_id=interview.id,
         question=payload.question,
         answer=payload.answer,
-        feedback=scored["feedback"],
+        feedback={k: scored[k] for k in ("summary", "strengths", "improvements", "follow_up") if k in scored},
         score=scored["score"],
     )
     db.add(turn)

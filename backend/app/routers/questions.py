@@ -17,7 +17,7 @@ async def generate_questions(payload: QuestionGenerateRequest, user: User = Depe
         plan = db.get(PrepPlan, payload.prep_plan_id)
         if not plan or plan.user_id != user.id:
             raise HTTPException(status_code=404, detail="准备计划不存在")
-    generated = await AIAgent().generate_questions(payload.focus, payload.count)
+    generated = await AIAgent().generate_questions(payload.focus, payload.count, user_id=user.id)
     questions = [
         Question(
             user_id=user.id,

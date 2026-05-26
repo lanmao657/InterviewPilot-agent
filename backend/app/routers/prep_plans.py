@@ -20,7 +20,7 @@ async def create_plan(payload: PrepPlanCreate, user: User = Depends(get_current_
     if jd and jd.user_id != user.id:
         raise HTTPException(status_code=404, detail="JD 不存在")
 
-    roadmap = await AIAgent().build_roadmap(resume.content if resume else "", jd.content if jd else "", payload.target_role)
+    roadmap = await AIAgent().build_roadmap(resume.content if resume else "", jd.content if jd else "", payload.target_role, user_id=user.id)
     plan = PrepPlan(
         user_id=user.id,
         resume_id=payload.resume_id,
