@@ -3,10 +3,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_retrieval_service
 from app.models import InterviewSession, InterviewStatus, InterviewTurn, PrepPlan, User
 from app.schemas import AnswerCreate, InterviewCreate, InterviewRead
 from app.services.ai_agent import AIAgent
+from app.services.retrieval import RetrievalService
 
 router = APIRouter(prefix="/interviews", tags=["interviews"])
 
@@ -25,13 +26,13 @@ def create_interview(payload: InterviewCreate, user: User = Depends(get_current_
 
 
 @router.post("/{interview_id}/answer", response_model=InterviewRead)
-async def answer_question(interview_id: int, payload: AnswerCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> InterviewSession:
+async def answer_question(interview_id: int, payload: AnswerCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db), retrieval: RetrievalService = Depends(get_retrieval_service)) -> InterviewSession:
     interview = db.scalar(
         select(InterviewSession).options(selectinload(InterviewSession.turns)).where(InterviewSession.id == interview_id)
     )
     if not interview or interview.user_id != user.id:
         raise HTTPException(status_code=404, detail="面试会话不存在")
-    scored = await AIAgent().score_answer(payload.question, payload.answer, user_id=user.id)
+    scored = await AIAgent(retrieval).score_answer(payload.question, payload.answer, user_id=user.id)
     turn = InterviewTurn(
         interview_id=interview.id,
         question=payload.question,

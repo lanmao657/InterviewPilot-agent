@@ -5,16 +5,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_retrieval_service
 from app.models import InterviewSession, Report, User
 from app.schemas import ReportRead
 from app.services.ai_agent import AIAgent
+from app.services.retrieval import RetrievalService
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
 @router.post("/{interview_id}", response_model=ReportRead)
-async def create_report(interview_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Report:
+async def create_report(interview_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db), retrieval: RetrievalService = Depends(get_retrieval_service)) -> Report:
     interview = db.scalar(
         select(InterviewSession)
         .options(selectinload(InterviewSession.turns))
@@ -27,7 +28,7 @@ async def create_report(interview_id: int, user: User = Depends(get_current_user
         return existing
 
     turns = [{"question": turn.question, "answer": turn.answer, "score": turn.score} for turn in interview.turns]
-    report_data = await AIAgent().build_report(interview.title, turns, user_id=user.id)
+    report_data = await AIAgent(retrieval).build_report(interview.title, turns, user_id=user.id)
     content = report_data if isinstance(report_data, str) else json.dumps(report_data, ensure_ascii=False)
     scores = [turn.score for turn in interview.turns]
     report = Report(

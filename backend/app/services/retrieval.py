@@ -1,12 +1,12 @@
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.models.document_chunk import DocumentChunk
 from app.services.embedding import EmbeddingService
 
 
 class RetrievalService:
-    def __init__(self, embedding_service: EmbeddingService, db: AsyncSession):
+    def __init__(self, embedding_service: EmbeddingService, db: Session):
         self.embedding_service = embedding_service
         self.db = db
 
@@ -32,7 +32,7 @@ class RetrievalService:
             .limit(top_k)
         )
 
-        result = await self.db.execute(stmt)
+        result = self.db.execute(stmt)
         chunks = result.scalars().all()
 
         # 3. 返回相关片段内容
@@ -59,7 +59,7 @@ class RetrievalService:
             .limit(top_k)
         )
 
-        result = await self.db.execute(stmt)
+        result = self.db.execute(stmt)
         rows = result.all()
 
         # cosine_distance = 1 - cosine_similarity, 返回范围 [-1, 1]

@@ -13,7 +13,6 @@ def mock_embedding_service():
 @pytest.fixture
 def mock_db():
     db = MagicMock()
-    db.execute = AsyncMock()
     db.execute.return_value = MagicMock()
     return db
 

@@ -3,16 +3,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_retrieval_service
 from app.models import Document, PrepPlan, User
 from app.schemas import PrepPlanCreate, PrepPlanRead
 from app.services.ai_agent import AIAgent
+from app.services.retrieval import RetrievalService
 
 router = APIRouter(prefix="/prep-plans", tags=["prep-plans"])
 
 
 @router.post("", response_model=PrepPlanRead)
-async def create_plan(payload: PrepPlanCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> PrepPlan:
+async def create_plan(payload: PrepPlanCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db), retrieval: RetrievalService = Depends(get_retrieval_service)) -> PrepPlan:
     resume = db.get(Document, payload.resume_id) if payload.resume_id else None
     jd = db.get(Document, payload.job_description_id) if payload.job_description_id else None
     if resume and resume.user_id != user.id:
@@ -20,7 +21,7 @@ async def create_plan(payload: PrepPlanCreate, user: User = Depends(get_current_
     if jd and jd.user_id != user.id:
         raise HTTPException(status_code=404, detail="JD 不存在")
 
-    roadmap = await AIAgent().build_roadmap(resume.content if resume else "", jd.content if jd else "", payload.target_role, user_id=user.id)
+    roadmap = await AIAgent(retrieval).build_roadmap(resume.content if resume else "", jd.content if jd else "", payload.target_role, user_id=user.id)
     plan = PrepPlan(
         user_id=user.id,
         resume_id=payload.resume_id,

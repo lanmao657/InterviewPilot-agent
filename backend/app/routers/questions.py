@@ -3,21 +3,22 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_retrieval_service
 from app.models import PrepPlan, Question, User
 from app.schemas import QuestionGenerateRequest, QuestionRead
 from app.services.ai_agent import AIAgent
+from app.services.retrieval import RetrievalService
 
 router = APIRouter(prefix="/questions", tags=["questions"])
 
 
 @router.post("/generate", response_model=list[QuestionRead])
-async def generate_questions(payload: QuestionGenerateRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[Question]:
+async def generate_questions(payload: QuestionGenerateRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db), retrieval: RetrievalService = Depends(get_retrieval_service)) -> list[Question]:
     if payload.prep_plan_id:
         plan = db.get(PrepPlan, payload.prep_plan_id)
         if not plan or plan.user_id != user.id:
             raise HTTPException(status_code=404, detail="准备计划不存在")
-    generated = await AIAgent().generate_questions(payload.focus, payload.count, user_id=user.id)
+    generated = await AIAgent(retrieval).generate_questions(payload.focus, payload.count, user_id=user.id)
     questions = [
         Question(
             user_id=user.id,
