@@ -17,6 +17,7 @@ const router = createRouter({
         { path: 'documents', name: 'documents', component: () => import('@/pages/DocumentsPage.vue') },
         { path: 'questions', name: 'questions', component: () => import('@/pages/QuestionsPage.vue') },
         { path: 'interview', name: 'interview', component: () => import('@/pages/InterviewPage.vue') },
+        { path: 'assistant', name: 'assistant', component: () => import('@/pages/AssistantPage.vue') },
         { path: 'reports', name: 'reports', component: () => import('@/pages/ReportsPage.vue') },
         { path: 'settings', name: 'settings', component: () => import('@/pages/SettingsPage.vue') },
       ],

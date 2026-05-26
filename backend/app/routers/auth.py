@@ -23,10 +23,13 @@ def _token_pair(user: User) -> TokenPair:
 
 @router.post("/register", response_model=TokenPair)
 def register(payload: UserCreate, db: Session = Depends(get_db)) -> TokenPair:
-    existing = db.scalar(select(User).where(User.email == payload.email.lower()))
+    existing = db.scalar(select(User).where(User.username == payload.username))
     if existing:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户名已注册")
+    email = payload.email.lower() if payload.email else None
+    if email and db.scalar(select(User).where(User.email == email)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="邮箱已注册")
-    user = User(email=payload.email.lower(), name=payload.name, hashed_password=hash_password(payload.password))
+    user = User(username=payload.username, email=email, name=payload.username, hashed_password=hash_password(payload.password))
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -35,9 +38,10 @@ def register(payload: UserCreate, db: Session = Depends(get_db)) -> TokenPair:
 
 @router.post("/login", response_model=TokenPair)
 def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenPair:
-    user = db.scalar(select(User).where(User.email == payload.email.lower()))
+    user_filter = User.email == payload.username if "@" in payload.username else User.username == payload.username
+    user = db.scalar(select(User).where(user_filter))
     if not user or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="邮箱或密码错误")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
     return _token_pair(user)
 
 
