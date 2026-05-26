@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     ai_api_key: str | None = None
     ai_model: str = "gpt-4.1-mini"
 
+    # Embedding 配置
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1536
+
     model_config = SettingsConfigDict(
         env_file=(PROJECT_ROOT / ".env", BACKEND_ROOT / ".env"),
         env_file_encoding="utf-8",
