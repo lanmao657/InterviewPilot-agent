@@ -14,7 +14,7 @@ class RetrievalService:
         self, query: str, user_id: int, top_k: int = 5
     ) -> list[str]:
         """1. 对 query 做 embedding
-           2. 在 document_chunks 中做 cosine similarity 检索
+           2. 在 document_chunks 中做 L2 distance 检索
            3. 返回 top_k 相关片段
         """
         # 1. 对查询文本做 embedding
@@ -62,5 +62,5 @@ class RetrievalService:
         result = await self.db.execute(stmt)
         rows = result.all()
 
-        # cosine_distance 返回 0-2，转换为 0-1 的相似度
+        # cosine_distance = 1 - cosine_similarity, 返回范围 [-1, 1]
         return [(chunk.content, 1 - distance) for chunk, distance in rows]
