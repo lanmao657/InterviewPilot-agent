@@ -22,9 +22,8 @@ class EmbeddingService:
     ) -> list[str]:
         """Split text into chunks by paragraph + token limit with overlap.
 
-        For paragraph-level splits, chunks are cleanly separated without
-        overlap to prevent unbounded growth. Overlap is preserved only
-        in force-split mode (for text without natural delimiters).
+        Overlap is applied at paragraph and sentence boundaries to preserve
+        context across chunk transitions.
         """
         # Split by paragraphs first
         paragraphs = text.split("\n\n")
@@ -58,14 +57,22 @@ class EmbeddingService:
                     if len(current_chunk) + len(sentence) > chunk_size:
                         if current_chunk:
                             chunks.append(current_chunk.strip())
-                        current_chunk = sentence
+                            # Preserve overlap from end of current chunk
+                            overlap_text = current_chunk[-overlap:] if overlap else ""
+                            current_chunk = overlap_text + sentence
+                        else:
+                            current_chunk = sentence
                     else:
                         current_chunk += "\n" + sentence if current_chunk else sentence
             else:
                 if len(current_chunk) + len(paragraph) > chunk_size:
                     if current_chunk:
                         chunks.append(current_chunk.strip())
-                    current_chunk = paragraph
+                        # Preserve overlap from end of current chunk
+                        overlap_text = current_chunk[-overlap:] if overlap else ""
+                        current_chunk = overlap_text + paragraph
+                    else:
+                        current_chunk = paragraph
                 else:
                     current_chunk += "\n\n" + paragraph if current_chunk else paragraph
 
