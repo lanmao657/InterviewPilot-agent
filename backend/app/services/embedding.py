@@ -59,7 +59,7 @@ class EmbeddingService:
                             chunks.append(current_chunk.strip())
                             # Preserve overlap from end of current chunk
                             overlap_text = current_chunk[-overlap:] if overlap else ""
-                            current_chunk = overlap_text + sentence
+                            current_chunk = overlap_text + "\n" + sentence
                         else:
                             current_chunk = sentence
                     else:
@@ -70,7 +70,7 @@ class EmbeddingService:
                         chunks.append(current_chunk.strip())
                         # Preserve overlap from end of current chunk
                         overlap_text = current_chunk[-overlap:] if overlap else ""
-                        current_chunk = overlap_text + paragraph
+                        current_chunk = overlap_text + "\n\n" + paragraph
                     else:
                         current_chunk = paragraph
                 else:
