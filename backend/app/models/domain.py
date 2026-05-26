@@ -48,6 +48,9 @@ class Document(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="documents")
+    chunks: Mapped[list["DocumentChunk"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
 
 
 class PrepPlan(Base):
@@ -164,3 +167,7 @@ class AssistantMessage(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     conversation: Mapped[AssistantConversation] = relationship(back_populates="messages")
+
+
+# Import after class definitions to avoid circular imports
+from app.models.document_chunk import DocumentChunk  # noqa: E402, F401
