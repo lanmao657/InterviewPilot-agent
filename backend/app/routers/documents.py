@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -8,6 +10,8 @@ from app.models import Document, DocumentKind, User
 from app.schemas import DocumentRead
 from app.services.documents import DocumentService, extract_upload_text, summarize_document
 from app.services.embedding import EmbeddingService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -25,10 +29,13 @@ async def _save_document(kind: DocumentKind, file: UploadFile, user: User, db: S
     db.commit()
     db.refresh(doc)
 
-    # 异步处理切片和向量化
-    embedding_service = EmbeddingService()
-    document_service = DocumentService(embedding_service, db)
-    await document_service.process_document(doc.id)
+    # 异步处理切片和向量化（失败不影响文档上传）
+    try:
+        embedding_service = EmbeddingService()
+        document_service = DocumentService(embedding_service, db)
+        await document_service.process_document(doc.id)
+    except Exception as e:
+        logger.error(f"文档切片处理失败: {e}")
 
     return doc
 

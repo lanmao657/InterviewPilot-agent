@@ -3,7 +3,7 @@ from io import BytesIO
 from docx import Document as DocxDocument
 from fastapi import UploadFile
 from pypdf import PdfReader
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models import Document, DocumentChunk
@@ -54,6 +54,11 @@ class DocumentService:
         document = result.scalar_one_or_none()
         if not document:
             return
+
+        # 先删除已有的切片（幂等性保护）
+        self.db.execute(
+            delete(DocumentChunk).where(DocumentChunk.document_id == document_id)
+        )
 
         # 切片
         chunks = self.embedding_service.chunk_text(document.content)
