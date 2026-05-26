@@ -3,6 +3,11 @@ from io import BytesIO
 from docx import Document as DocxDocument
 from fastapi import UploadFile
 from pypdf import PdfReader
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import Document, DocumentChunk
+from app.services.embedding import EmbeddingService
 
 
 async def extract_upload_text(file: UploadFile) -> str:
@@ -20,6 +25,7 @@ async def extract_upload_text(file: UploadFile) -> str:
 
 
 def summarize_document(text: str, kind: str) -> dict:
+    """生成文档摘要（保留向后兼容）"""
     compact = " ".join(text.split())[:600]
     if kind == "resume":
         return {
@@ -32,3 +38,42 @@ def summarize_document(text: str, kind: str) -> dict:
         "highlights": ["岗位职责", "能力要求", "面试关注点"],
         "preview": compact or "未解析到文本，请检查文件内容。",
     }
+
+
+class DocumentService:
+    def __init__(self, embedding_service: EmbeddingService, db: Session):
+        self.embedding_service = embedding_service
+        self.db = db
+
+    async def process_document(self, document_id: int) -> None:
+        """处理文档：切片 + 向量化"""
+        # 获取文档
+        result = self.db.execute(
+            select(Document).where(Document.id == document_id)
+        )
+        document = result.scalar_one_or_none()
+        if not document:
+            return
+
+        # 切片
+        chunks = self.embedding_service.chunk_text(document.content)
+
+        # 生成 embeddings
+        embeddings = await self.embedding_service.embed(chunks)
+
+        # 保存切片到数据库
+        for i, (chunk_content, embedding) in enumerate(zip(chunks, embeddings)):
+            chunk = DocumentChunk(
+                document_id=document_id,
+                user_id=document.user_id,
+                chunk_index=i,
+                content=chunk_content,
+                embedding=embedding,
+            )
+            self.db.add(chunk)
+
+        self.db.commit()
+
+    def summarize_document(self, text: str, kind: str) -> dict:
+        """生成文档摘要"""
+        return summarize_document(text, kind)
