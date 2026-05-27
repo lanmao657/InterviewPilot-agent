@@ -1,11 +1,12 @@
+<!-- frontend/src/pages/LoginPage.vue -->
 <script setup lang="ts">
 import { Loader2 } from 'lucide-vue-next'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import ThemeToggle from '@/components/layout/ThemeToggle.vue'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 
@@ -57,44 +58,58 @@ async function submit() {
 </script>
 
 <template>
-  <main class="grid min-h-screen place-items-center px-4 py-10">
-    <Card class="w-full max-w-md">
-      <CardHeader>
-        <CardTitle class="text-2xl">InterviewPilot</CardTitle>
-        <CardDescription>登录后开始你的 AI 面试准备闭环。</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form class="flex flex-col gap-4" @submit.prevent="submit">
-          <label class="flex flex-col gap-2 text-sm font-medium">
-            {{ isRegister ? '用户名' : '用户名或邮箱' }}
-            <Input v-model="form.username" autocomplete="username" />
-            <span v-if="isRegister" class="text-[11px] font-normal leading-4 text-muted-foreground/70">
-              {{ usernameRequirements }}
-            </span>
-          </label>
-          <label class="flex flex-col gap-2 text-sm font-medium">
-            密码
-            <Input
-              v-model="form.password"
-              type="password"
-              :autocomplete="isRegister ? 'new-password' : 'current-password'"
-            />
-            <span v-if="isRegister" class="text-[11px] font-normal leading-4 text-muted-foreground/70">
-              {{ passwordRequirements }}
-            </span>
-          </label>
-          <p v-if="error" class="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {{ error }}
-          </p>
-          <Button type="submit" :disabled="loading">
-            <Loader2 v-if="loading" class="animate-spin" data-icon="inline-start" />
-            {{ isRegister ? '注册并进入' : '登录' }}
-          </Button>
-          <Button type="button" variant="ghost" @click="toggleRegister">
-            {{ isRegister ? '已有账号，去登录' : '没有账号，创建一个' }}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+  <main class="relative grid min-h-screen place-items-center overflow-hidden px-4 py-10">
+    <!-- 背景装饰 -->
+    <div class="pointer-events-none absolute inset-0">
+      <div class="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-[var(--primary)]/10 blur-3xl" />
+      <div class="absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-[var(--accent)]/10 blur-3xl" />
+    </div>
+
+    <!-- 主题切换 -->
+    <div class="absolute right-4 top-4">
+      <ThemeToggle />
+    </div>
+
+    <!-- 登录卡片 -->
+    <div class="glass-elevated w-full max-w-md rounded-2xl p-8 animate-fade-in-up">
+      <div class="mb-8 text-center">
+        <div class="mx-auto mb-4 grid size-16 place-items-center rounded-2xl bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)] text-2xl font-bold text-white shadow-lg">
+          IP
+        </div>
+        <h1 class="text-2xl font-bold">InterviewPilot</h1>
+        <p class="mt-1 text-sm text-[var(--text-secondary)]">AI 面试准备平台</p>
+      </div>
+
+      <form class="flex flex-col gap-4" @submit.prevent="submit">
+        <label class="flex flex-col gap-2 text-sm font-medium">
+          {{ isRegister ? '用户名' : '用户名或邮箱' }}
+          <Input v-model="form.username" autocomplete="username" />
+          <span v-if="isRegister" class="text-[11px] font-normal leading-4 text-[var(--text-muted)]">
+            {{ usernameRequirements }}
+          </span>
+        </label>
+        <label class="flex flex-col gap-2 text-sm font-medium">
+          密码
+          <Input
+            v-model="form.password"
+            type="password"
+            :autocomplete="isRegister ? 'new-password' : 'current-password'"
+          />
+          <span v-if="isRegister" class="text-[11px] font-normal leading-4 text-[var(--text-muted)]">
+            {{ passwordRequirements }}
+          </span>
+        </label>
+        <p v-if="error" class="rounded-xl border border-[var(--error)]/30 bg-[var(--error)]/10 px-4 py-2.5 text-sm text-[var(--error)]">
+          {{ error }}
+        </p>
+        <Button type="submit" :disabled="loading" class="mt-2">
+          <Loader2 v-if="loading" class="size-4 animate-spin" />
+          {{ isRegister ? '注册并进入' : '登录' }}
+        </Button>
+        <Button type="button" variant="ghost" @click="toggleRegister">
+          {{ isRegister ? '已有账号，去登录' : '没有账号，创建一个' }}
+        </Button>
+      </form>
+    </div>
   </main>
 </template>
