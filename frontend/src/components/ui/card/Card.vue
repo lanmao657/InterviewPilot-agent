@@ -5,7 +5,7 @@ defineProps<{ class?: string }>()
 </script>
 
 <template>
-  <section :class="cn('rounded-lg border bg-card text-card-foreground shadow-sm', $props.class)">
+  <section :class="cn('glass rounded-2xl text-sm', $props.class)">
     <slot />
   </section>
 </template>
