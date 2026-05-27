@@ -6,20 +6,24 @@ import {
   FileText,
   Gauge,
   LogOut,
+  Menu,
   MessageSquareText,
   Settings,
   UserCircle,
+  X,
 } from 'lucide-vue-next'
-import { computed } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { computed, ref } from 'vue'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 
 import GlobalAssistantWidget from '@/components/assistant/GlobalAssistantWidget.vue'
+import ThemeToggle from '@/components/layout/ThemeToggle.vue'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const sidebarOpen = ref(false)
 
 const navItems = [
   { label: '仪表盘', path: '/dashboard', icon: Gauge },
@@ -31,76 +35,173 @@ const navItems = [
   { label: '设置', path: '/settings', icon: Settings },
 ]
 
+const mobileNavItems = navItems.slice(0, 5)
+
 const pageTitle = computed(() => navItems.find((item) => route.path.startsWith(item.path))?.label ?? '仪表盘')
 
 function logout() {
   auth.logout()
   router.push('/login')
 }
+
+function closeSidebar() {
+  sidebarOpen.value = false
+}
 </script>
 
 <template>
   <div class="flex min-h-screen">
-    <aside class="hidden w-64 shrink-0 border-r bg-card/88 px-4 py-5 shadow-sm backdrop-blur lg:flex lg:flex-col">
-      <div class="flex items-center gap-3 px-2">
-        <div class="grid size-10 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">IP</div>
-        <div>
-          <p class="text-base font-semibold">InterviewPilot</p>
-          <p class="text-xs text-muted-foreground">AI 面试准备</p>
+    <!-- 移动端遮罩 -->
+    <Transition name="fade">
+      <div
+        v-if="sidebarOpen"
+        class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
+        @click="closeSidebar"
+      />
+    </Transition>
+
+    <!-- 侧边栏 -->
+    <aside
+      class="fixed inset-y-0 left-0 z-50 flex w-72 flex-col glass-elevated transition-transform duration-300 lg:static lg:translate-x-0"
+      :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+    >
+      <!-- Logo -->
+      <div class="flex items-center justify-between gap-3 px-5 py-5">
+        <div class="flex items-center gap-3">
+          <div class="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)] text-sm font-bold text-white shadow-md">
+            IP
+          </div>
+          <div>
+            <p class="text-base font-semibold">InterviewPilot</p>
+            <p class="text-xs text-[var(--text-muted)]">AI 面试准备</p>
+          </div>
         </div>
+        <Button variant="ghost" size="icon" class="lg:hidden" @click="closeSidebar">
+          <X class="size-5" />
+        </Button>
       </div>
 
-      <nav class="mt-8 flex flex-col gap-1">
+      <!-- 导航 -->
+      <nav class="mt-4 flex flex-1 flex-col gap-1 px-3">
         <RouterLink
           v-for="item in navItems"
           :key="item.path"
           :to="item.path"
-          class="flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-          :class="{ 'bg-accent text-accent-foreground': route.path.startsWith(item.path) }"
+          class="group relative flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-[var(--text-secondary)] transition-all duration-200 hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]"
+          :class="{ 'bg-[var(--primary)]/10 text-[var(--primary)]': route.path.startsWith(item.path) }"
+          @click="closeSidebar"
         >
-          <component :is="item.icon" data-icon="inline-start" />
+          <div
+            v-if="route.path.startsWith(item.path)"
+            class="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[var(--primary)]"
+          />
+          <component :is="item.icon" class="size-5" />
           {{ item.label }}
         </RouterLink>
       </nav>
 
-      <div class="mt-auto rounded-lg border bg-background/70 p-3">
+      <!-- 用户信息 -->
+      <div class="mx-3 mb-4 rounded-xl glass-flat p-3">
         <div class="flex items-center gap-3">
-          <UserCircle class="text-muted-foreground" />
-          <div class="min-w-0">
+          <div class="grid size-9 place-items-center rounded-full bg-[var(--primary)]/10">
+            <UserCircle class="size-5 text-[var(--primary)]" />
+          </div>
+          <div class="min-w-0 flex-1">
             <p class="truncate text-sm font-medium">{{ auth.user?.name }}</p>
-            <p class="truncate text-xs text-muted-foreground">{{ auth.user?.username }}</p>
+            <p class="truncate text-xs text-[var(--text-muted)]">{{ auth.user?.username }}</p>
           </div>
         </div>
-        <Button variant="ghost" size="sm" class="mt-3 w-full justify-start" @click="logout">
-          <LogOut data-icon="inline-start" />
+        <Button variant="ghost" size="sm" class="mt-2 w-full justify-start" @click="logout">
+          <LogOut class="size-4" />
           退出登录
         </Button>
       </div>
     </aside>
 
-    <main class="min-w-0 flex-1">
-      <header class="sticky top-0 z-10 border-b bg-background/82 px-5 py-4 backdrop-blur">
-        <div class="mx-auto flex max-w-7xl items-center justify-between gap-3">
-          <div>
-            <p class="text-xs font-medium text-muted-foreground">InterviewPilot</p>
-            <h1 class="text-xl font-semibold">{{ pageTitle }}</h1>
+    <!-- 主内容区 -->
+    <main class="flex min-w-0 flex-1 flex-col">
+      <!-- Header -->
+      <header class="sticky top-0 z-30 glass border-b border-[var(--glass-border)]">
+        <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-5 py-3">
+          <div class="flex items-center gap-3">
+            <Button variant="ghost" size="icon" class="lg:hidden" @click="sidebarOpen = true">
+              <Menu class="size-5" />
+            </Button>
+            <div>
+              <p class="text-xs font-medium text-[var(--text-muted)]">InterviewPilot</p>
+              <h1 class="text-lg font-semibold">{{ pageTitle }}</h1>
+            </div>
           </div>
           <div class="flex items-center gap-2">
-            <Button variant="outline" size="sm" @click="router.push('/assistant')">
-              <Bot data-icon="inline-start" />
+            <ThemeToggle />
+            <Button variant="secondary" size="sm" class="hidden sm:inline-flex" @click="router.push('/assistant')">
+              <Bot class="size-4" />
               AI 助手
             </Button>
             <Button size="sm" @click="router.push('/interview')">
-              <MessageSquareText data-icon="inline-start" />
-              开始练习
+              <MessageSquareText class="size-4" />
+              <span class="hidden sm:inline">开始练习</span>
             </Button>
           </div>
         </div>
       </header>
-      <div class="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-        <RouterView />
+
+      <!-- 页面内容 -->
+      <div class="mx-auto w-full max-w-7xl flex-1 px-4 py-5 sm:px-6 lg:px-8">
+        <RouterView v-slot="{ Component }">
+          <Transition name="page" mode="out-in">
+            <component :is="Component" />
+          </Transition>
+        </RouterView>
       </div>
+
+      <!-- 移动端底部导航 -->
+      <nav class="fixed bottom-0 left-0 right-0 z-30 glass border-t border-[var(--glass-border)] pb-[env(safe-area-inset-bottom)] lg:hidden">
+        <div class="flex items-center justify-around px-2 py-2">
+          <RouterLink
+            v-for="item in mobileNavItems"
+            :key="item.path"
+            :to="item.path"
+            class="flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] font-medium transition-colors"
+            :class="route.path.startsWith(item.path) ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]'"
+          >
+            <component :is="item.icon" class="size-5" />
+            {{ item.label }}
+          </RouterLink>
+        </div>
+      </nav>
+
+      <!-- 移动端底部导航占位 -->
+      <div class="h-16 lg:hidden" />
     </main>
+
     <GlobalAssistantWidget />
   </div>
 </template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 200ms ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.page-enter-active {
+  animation: fade-in-up 300ms ease-out;
+}
+.page-leave-active {
+  animation: fade-out-up 200ms ease-in;
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-out-up {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-8px); }
+}
+</style>
