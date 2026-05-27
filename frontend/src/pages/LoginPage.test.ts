@@ -1,8 +1,23 @@
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import LoginPage from './LoginPage.vue'
+
+// 模拟 window.matchMedia，主题 store 初始化时需要
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+})
 
 describe('LoginPage', () => {
   it('renders the product name and login form', () => {
@@ -30,7 +45,9 @@ describe('LoginPage', () => {
       },
     })
 
-    await wrapper.find('button[type="button"]').trigger('click')
+    // 找到"没有账号，创建一个"按钮并点击
+    const toggleButton = wrapper.findAll('button[type="button"]').find((b) => b.text().includes('没有账号'))
+    await toggleButton!.trigger('click')
 
     expect(wrapper.text()).toContain('3-120 个字符，不能含 @')
     expect(wrapper.text()).toContain('至少 8 位')
