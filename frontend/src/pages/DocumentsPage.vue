@@ -66,7 +66,7 @@ function preview(doc: DocumentItem) {
 
         <div class="glass-flat rounded-xl p-4">
           <p class="mb-3 text-sm font-semibold">简历</p>
-          <input class="text-sm" type="file" accept=".pdf,.docx,.txt" @change="resumeFile = ($event.target as HTMLInputElement).files?.[0] ?? null" />
+          <input class="text-sm" type="file" accept=".pdf,.docx,.pptx,.txt" @change="resumeFile = ($event.target as HTMLInputElement).files?.[0] ?? null" />
           <Button class="mt-3" size="sm" :disabled="!resumeFile || uploadMutation.isPending.value" @click="upload('resume')">
             <Upload class="size-4" />
             上传简历
@@ -75,7 +75,7 @@ function preview(doc: DocumentItem) {
 
         <div class="glass-flat rounded-xl p-4">
           <p class="mb-3 text-sm font-semibold">职位 JD</p>
-          <input class="text-sm" type="file" accept=".pdf,.docx,.txt" @change="jdFile = ($event.target as HTMLInputElement).files?.[0] ?? null" />
+          <input class="text-sm" type="file" accept=".pdf,.docx,.pptx,.txt" @change="jdFile = ($event.target as HTMLInputElement).files?.[0] ?? null" />
           <Button class="mt-3" size="sm" :disabled="!jdFile || uploadMutation.isPending.value" @click="upload('job-description')">
             <Upload class="size-4" />
             上传 JD

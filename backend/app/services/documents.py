@@ -2,6 +2,7 @@ from io import BytesIO
 
 from docx import Document as DocxDocument
 from fastapi import UploadFile
+from pptx import Presentation
 from pypdf import PdfReader
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -21,6 +22,14 @@ async def extract_upload_text(file: UploadFile) -> str:
     if suffix == "docx":
         doc = DocxDocument(BytesIO(data))
         return "\n".join(paragraph.text for paragraph in doc.paragraphs).strip()
+    if suffix == "pptx":
+        prs = Presentation(BytesIO(data))
+        texts = []
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    texts.append(shape.text_frame.text)
+        return "\n".join(texts).strip()
     return data.decode("utf-8", errors="ignore").strip()
 
 
