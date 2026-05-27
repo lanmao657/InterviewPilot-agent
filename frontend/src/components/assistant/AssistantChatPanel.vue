@@ -38,16 +38,16 @@ watch(
     <div class="flex items-center justify-between gap-3">
       <div>
         <p class="text-sm font-semibold">AI 助手</p>
-        <p class="text-xs text-muted-foreground">基于简历、JD、面试记录和报告回答</p>
+        <p class="text-xs text-[var(--text-muted)]">基于简历、JD、面试记录和报告回答</p>
       </div>
       <Button variant="ghost" size="icon" title="清空聊天" @click="assistant.clear">
-        <Trash2 data-icon="inline-start" />
+        <Trash2 class="size-4" />
       </Button>
     </div>
 
-    <div ref="scrollRef" class="min-h-0 flex-1 overflow-y-auto rounded-lg border bg-background/70 p-3">
-      <div v-if="!assistant.messages.length" class="flex h-full min-h-44 flex-col justify-center gap-2 text-sm text-muted-foreground">
-        <p class="font-medium text-foreground">可以这样问我：</p>
+    <div ref="scrollRef" class="min-h-0 flex-1 overflow-y-auto rounded-xl glass-flat p-3">
+      <div v-if="!assistant.messages.length" class="flex h-full min-h-44 flex-col justify-center gap-2 text-sm text-[var(--text-muted)]">
+        <p class="font-medium text-[var(--text-primary)]">可以这样问我：</p>
         <p>我下一步该怎么准备？</p>
         <p>帮我根据 JD 梳理 5 个高频追问。</p>
         <p>我的 STAR 回答哪里最需要加强？</p>
@@ -60,8 +60,10 @@ watch(
           :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
         >
           <div
-            class="max-w-[88%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm leading-6"
-            :class="message.role === 'user' ? 'bg-primary text-primary-foreground' : 'border bg-card text-card-foreground'"
+            class="max-w-[88%] whitespace-pre-wrap rounded-xl px-4 py-2.5 text-sm leading-6"
+            :class="message.role === 'user'
+              ? 'bg-gradient-to-r from-[var(--primary)] to-[var(--primary-dark)] text-white'
+              : 'glass-flat'"
           >
             {{ message.content || (message.status === 'streaming' ? '正在生成...' : '') }}
           </div>
@@ -69,7 +71,7 @@ watch(
       </div>
     </div>
 
-    <p v-if="assistant.error" class="text-xs text-destructive">{{ assistant.error }}</p>
+    <p v-if="assistant.error" class="text-xs text-[var(--error)]">{{ assistant.error }}</p>
     <form class="flex gap-2" @submit.prevent="send">
       <Textarea
         v-model="input"
@@ -78,7 +80,7 @@ watch(
         @keydown.ctrl.enter.prevent="send"
       />
       <Button type="submit" size="icon" :disabled="assistant.isStreaming || !input.trim()">
-        <Send data-icon="inline-start" />
+        <Send class="size-4" />
       </Button>
     </form>
   </div>
