@@ -1,3 +1,4 @@
+import uuid
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -60,3 +61,22 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)) -> TokenPair
 @router.get("/me", response_model=UserRead)
 def me(user: User = Depends(get_current_user)) -> User:
     return user
+
+
+@router.post("/guest", response_model=TokenPair)
+def guest_login(db: Session = Depends(get_db)) -> TokenPair:
+    """游客登录：自动创建匿名用户"""
+    guest_id = str(uuid.uuid4())[:8]
+    username = f"guest_{guest_id}"
+
+    user = User(
+        username=username,
+        email=None,
+        name=f"游客 {guest_id}",
+        hashed_password=hash_password(uuid.uuid4().hex),
+        is_anonymous=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return _token_pair(user)
