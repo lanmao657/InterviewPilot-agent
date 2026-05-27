@@ -2,7 +2,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api'
 
-export type User = { id: number; username: string; name: string; email: string | null }
+export type User = { id: number; username: string; name: string; email: string | null; is_anonymous: boolean }
 export type TokenPair = { access_token: string; refresh_token: string; token_type: string; user: User }
 export type DocumentItem = { id: number; kind: 'resume' | 'job_description'; filename: string; summary: Record<string, unknown>; created_at: string }
 export type PrepPlan = { id: number; title: string; target_role: string; fit_score: number; status: string; roadmap: Record<string, unknown>; created_at: string }
@@ -96,6 +96,8 @@ export const api = {
     request<TokenPair>('/auth/register', { method: 'POST', body: JSON.stringify(payload), auth: false }),
   login: (payload: { username: string; password: string }) =>
     request<TokenPair>('/auth/login', { method: 'POST', body: JSON.stringify(payload), auth: false }),
+  guestLogin: () =>
+    request<TokenPair>('/auth/guest', { method: 'POST', auth: false }),
   me: () => request<User>('/auth/me'),
   documents: () => request<DocumentItem[]>('/documents'),
   uploadDocument: (kind: 'resume' | 'job-description', file: File) => {
