@@ -1,3 +1,4 @@
+<!-- frontend/src/pages/QuestionsPage.vue -->
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { RefreshCw } from 'lucide-vue-next'
@@ -5,7 +6,6 @@ import { ref } from 'vue'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 
@@ -24,16 +24,23 @@ const generateMutation = useMutation({
     }),
   onSuccess: () => queryClient.invalidateQueries({ queryKey: ['questions'] }),
 })
+
+// 难度与 Badge 变体映射
+const difficultyVariant: Record<string, 'default' | 'accent' | 'warning'> = {
+  easy: 'default',
+  medium: 'accent',
+  hard: 'warning',
+}
 </script>
 
 <template>
   <div class="flex flex-col gap-5">
-    <Card>
-      <CardHeader>
-        <CardTitle>题库生成</CardTitle>
-        <CardDescription>根据准备计划生成结构化面试题。</CardDescription>
-      </CardHeader>
-      <CardContent class="grid gap-4 md:grid-cols-[1fr_160px_auto]">
+    <!-- 生成配置 -->
+    <div class="glass rounded-2xl p-6">
+      <h2 class="text-lg font-semibold">题库生成</h2>
+      <p class="mb-5 text-sm text-[var(--text-secondary)]">根据准备计划生成结构化面试题</p>
+
+      <div class="grid gap-4 md:grid-cols-[1fr_160px_auto]">
         <label class="flex flex-col gap-2 text-sm font-medium">
           训练重点
           <Input v-model="focus" />
@@ -43,26 +50,28 @@ const generateMutation = useMutation({
           <Input v-model.number="count" type="number" min="1" max="12" />
         </label>
         <Button class="self-end" :disabled="generateMutation.isPending.value" @click="generateMutation.mutate()">
-          <RefreshCw data-icon="inline-start" />
+          <RefreshCw class="size-4" :class="{ 'animate-spin': generateMutation.isPending.value }" />
           生成题目
         </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
 
+    <!-- 题目列表 -->
     <section class="grid gap-4 lg:grid-cols-2">
-      <Card v-for="question in questionsQuery.data.value" :key="question.id">
-        <CardHeader>
-          <div class="flex items-center justify-between gap-3">
-            <Badge variant="accent">{{ question.category }}</Badge>
-            <Badge variant="outline">{{ question.difficulty }}</Badge>
-          </div>
-          <CardTitle class="leading-6">{{ question.prompt }}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p class="text-sm text-muted-foreground">评分维度：清晰度、结构、证据、复盘深度。</p>
-        </CardContent>
-      </Card>
+      <div
+        v-for="(question, index) in questionsQuery.data.value"
+        :key="question.id"
+        class="glass rounded-2xl p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg animate-stagger"
+        :style="{ '--stagger-index': index }"
+      >
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <Badge variant="accent">{{ question.category }}</Badge>
+          <Badge :variant="difficultyVariant[question.difficulty] ?? 'default'">{{ question.difficulty }}</Badge>
+        </div>
+        <p class="text-base font-medium leading-6">{{ question.prompt }}</p>
+        <p class="mt-3 text-xs text-[var(--text-muted)]">评分维度：清晰度、结构、证据、复盘深度</p>
+      </div>
     </section>
-    <p v-if="!questionsQuery.data.value?.length" class="text-sm text-muted-foreground">还没有题目，先生成一组。</p>
+    <p v-if="!questionsQuery.data.value?.length" class="text-sm text-[var(--text-muted)]">还没有题目，先生成一组。</p>
   </div>
 </template>
