@@ -39,7 +39,7 @@ class RetrievalService:
         return [chunk.content for chunk in chunks]
 
     async def search_with_scores(
-        self, query: str, user_id: int, top_k: int = 5
+        self, query: str, user_id: int, top_k: int = 5, document_id: int | None = None
     ) -> list[tuple[str, float]]:
         """返回相关片段及其相似度分数"""
         query_embedding = await self.embedding_service.embed([query])
@@ -58,6 +58,10 @@ class RetrievalService:
             .order_by("distance")
             .limit(top_k)
         )
+
+        # 如果指定了 document_id，只搜索该文档的切片
+        if document_id is not None:
+            stmt = stmt.where(DocumentChunk.document_id == document_id)
 
         result = self.db.execute(stmt)
         rows = result.all()

@@ -42,7 +42,7 @@ class MatchingService:
 
         for point in jd_points:
             results = await self.retrieval_service.search_with_scores(
-                point, user_id, top_k=3
+                point, user_id, top_k=3, document_id=resume_id
             )
             if results:
                 # 取最高相似度
