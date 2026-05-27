@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  AlertTriangle,
   BarChart3,
   BookOpenCheck,
   Bot,
@@ -120,6 +121,20 @@ function closeSidebar() {
 
     <!-- 主内容区 -->
     <main class="flex min-w-0 flex-1 flex-col">
+      <!-- 游客提示横幅 -->
+      <Transition name="fade">
+        <div
+          v-if="auth.isGuest"
+          class="flex items-center justify-center gap-2 border-b border-[var(--warning)]/30 bg-[var(--warning)]/10 px-4 py-2 text-sm"
+        >
+          <AlertTriangle class="size-4 text-[var(--warning)]" />
+          <span class="text-[var(--text-secondary)]">当前为游客模式，数据仅在本次会话中保存</span>
+          <Button variant="ghost" size="sm" @click="router.push('/login')">
+            注册正式账号
+          </Button>
+        </div>
+      </Transition>
+
       <!-- Header -->
       <header class="sticky top-0 z-30 glass border-b border-[var(--glass-border)]">
         <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-5 py-3">
