@@ -69,6 +69,7 @@ class UserRead(BaseModel):
     username: str
     name: str
     email: EmailStr | None = None
+    is_anonymous: bool = False
 
     model_config = {"from_attributes": True}
 
