@@ -22,7 +22,13 @@ const jds = computed(() => documentsQuery.data.value?.filter((item) => item.kind
 
 const uploadMutation = useMutation({
   mutationFn: ({ kind, file }: { kind: 'resume' | 'job-description'; file: File }) => api.uploadDocument(kind, file),
-  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents'] }),
+  onSuccess: () => {
+    message.value = '上传并解析成功'
+    queryClient.invalidateQueries({ queryKey: ['documents'] })
+  },
+  onError: (err: Error) => {
+    message.value = `上传失败：${err.message}`
+  },
 })
 
 const planMutation = useMutation({
@@ -41,9 +47,12 @@ const planMutation = useMutation({
 
 async function upload(kind: 'resume' | 'job-description') {
   const file = kind === 'resume' ? resumeFile.value : jdFile.value
-  if (!file) return
-  await uploadMutation.mutateAsync({ kind, file })
-  message.value = '上传并解析成功'
+  if (!file) {
+    message.value = '请先选择文件'
+    return
+  }
+  message.value = ''
+  uploadMutation.mutate({ kind, file })
 }
 
 function preview(doc: DocumentItem) {
