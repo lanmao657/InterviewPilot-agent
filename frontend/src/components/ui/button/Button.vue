@@ -5,20 +5,25 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  'focus-ring inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50',
+  'focus-ring inline-flex items-center justify-center gap-2 rounded-xl text-sm font-medium transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 active:scale-95',
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-        outline: 'border bg-card hover:bg-accent hover:text-accent-foreground',
-        ghost: 'hover:bg-accent hover:text-accent-foreground',
-        destructive: 'bg-destructive text-white hover:bg-destructive/90',
+        default:
+          'bg-gradient-to-r from-[var(--primary)] to-[var(--primary-dark)] text-white shadow-md hover:shadow-lg hover:-translate-y-0.5',
+        secondary:
+          'glass hover:bg-[var(--glass-bg-hover)] hover:-translate-y-0.5',
+        outline:
+          'border border-[var(--glass-border)] bg-transparent hover:bg-[var(--glass-bg)] hover:-translate-y-0.5',
+        ghost:
+          'hover:bg-[var(--glass-bg)] hover:-translate-y-0.5',
+        destructive:
+          'bg-[var(--error)] text-white hover:bg-[var(--error)]/90 hover:-translate-y-0.5',
       },
       size: {
-        default: 'h-10 px-4 py-2',
-        sm: 'h-9 rounded-md px-3',
-        lg: 'h-11 rounded-md px-6',
+        default: 'h-10 px-5 py-2',
+        sm: 'h-9 rounded-lg px-3',
+        lg: 'h-12 rounded-xl px-7',
         icon: 'size-10',
       },
     },
