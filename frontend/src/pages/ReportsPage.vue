@@ -1,17 +1,58 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { FileBarChart } from 'lucide-vue-next'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
+import RadarChart from '@/components/charts/RadarChart.vue'
+import TrendChart from '@/components/charts/TrendChart.vue'
 import { api } from '@/lib/api'
 
 const reportsQuery = useQuery({ queryKey: ['reports'], queryFn: api.reports })
+
+// Chart data - would be computed from actual reports in production
+const averageScores = ref({
+  clarity: 75,
+  structure: 70,
+  evidence: 72,
+  reflection: 68,
+})
+
+const scoreTrend = ref([
+  { date: '第1次', score: 65 },
+  { date: '第2次', score: 72 },
+  { date: '第3次', score: 78 },
+  { date: '第4次', score: 82 },
+])
 </script>
 
 <template>
-  <div class="grid gap-4 lg:grid-cols-2">
+  <div class="flex flex-col gap-6">
+    <!-- Charts section -->
+    <div class="grid gap-4 md:grid-cols-2">
+      <Card>
+        <CardHeader>
+          <CardTitle>能力维度分析</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <RadarChart :data="averageScores" />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>分数趋势</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TrendChart :data="scoreTrend" />
+        </CardContent>
+      </Card>
+    </div>
+
+    <!-- Reports list -->
+    <div class="grid gap-4 lg:grid-cols-2">
     <Card v-for="report in reportsQuery.data.value" :key="report.id">
       <CardHeader>
         <div class="flex items-start justify-between gap-3">
@@ -34,5 +75,6 @@ const reportsQuery = useQuery({ queryKey: ['reports'], queryFn: api.reports })
         <CardDescription>完成至少一轮模拟面试后生成复盘报告。</CardDescription>
       </CardHeader>
     </Card>
+    </div>
   </div>
 </template>
