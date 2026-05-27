@@ -1,6 +1,6 @@
 <!-- frontend/src/pages/LoginPage.vue -->
 <script setup lang="ts">
-import { Loader2 } from 'lucide-vue-next'
+import { Loader2, UserX } from 'lucide-vue-next'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -14,6 +14,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const isRegister = ref(false)
 const loading = ref(false)
+const guestLoading = ref(false)
 const error = ref('')
 const form = ref({ username: 'demo', password: 'password123' })
 const usernameRequirements = '3-120 个字符，不能含 @'
@@ -53,6 +54,20 @@ async function submit() {
     error.value = err instanceof Error ? err.message : '登录失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function guestLogin() {
+  guestLoading.value = true
+  error.value = ''
+  try {
+    const session = await api.guestLogin()
+    auth.setSession(session, true)  // isGuest = true
+    router.push('/dashboard')
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '游客登录失败'
+  } finally {
+    guestLoading.value = false
   }
 }
 </script>
@@ -102,10 +117,17 @@ async function submit() {
         <p v-if="error" class="rounded-xl border border-[var(--error)]/30 bg-[var(--error)]/10 px-4 py-2.5 text-sm text-[var(--error)]">
           {{ error }}
         </p>
-        <Button type="submit" :disabled="loading" class="mt-2">
-          <Loader2 v-if="loading" class="size-4 animate-spin" />
-          {{ isRegister ? '注册并进入' : '登录' }}
-        </Button>
+        <div class="mt-2 flex gap-3">
+          <Button type="submit" :disabled="loading" class="flex-1">
+            <Loader2 v-if="loading" class="size-4 animate-spin" />
+            {{ isRegister ? '注册并进入' : '登录' }}
+          </Button>
+          <Button type="button" variant="secondary" :disabled="guestLoading" class="flex-1" @click="guestLogin">
+            <UserX v-if="!guestLoading" class="size-4" />
+            <Loader2 v-else class="size-4 animate-spin" />
+            游客体验
+          </Button>
+        </div>
         <Button type="button" variant="ghost" @click="toggleRegister">
           {{ isRegister ? '已有账号，去登录' : '没有账号，创建一个' }}
         </Button>
