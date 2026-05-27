@@ -1,3 +1,24 @@
+<script setup lang="ts">
+import { cn } from '@/lib/utils'
+
+const props = withDefaults(
+  defineProps<{
+    orientation?: 'horizontal' | 'vertical'
+    class?: string
+  }>(),
+  {
+    orientation: 'horizontal',
+    class: '',
+  },
+)
+</script>
+
 <template>
-  <div class="h-px w-full bg-border" />
+  <div
+    :class="cn(
+      'shrink-0 bg-[var(--border)]',
+      orientation === 'horizontal' ? 'h-px w-full' : 'h-full w-px',
+      $props.class,
+    )"
+  />
 </template>
