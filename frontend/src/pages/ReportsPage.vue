@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
 import { FileBarChart } from 'lucide-vue-next'
-import { ref } from 'vue'
+import { computed } from 'vue'
 
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -11,19 +11,28 @@ import { api } from '@/lib/api'
 
 const reportsQuery = useQuery({ queryKey: ['reports'], queryFn: api.reports })
 
-const averageScores = ref({
-  clarity: 75,
-  structure: 70,
-  evidence: 72,
-  reflection: 68,
+const averageScores = computed(() => {
+  const latest = reportsQuery.data.value?.[0]
+  if (!latest?.metrics) return { clarity: 0, structure: 0, evidence: 0, reflection: 0 }
+  return {
+    clarity: latest.metrics['表达结构'] ?? 0,
+    structure: latest.metrics['岗位匹配'] ?? 0,
+    evidence: latest.metrics['证据质量'] ?? 0,
+    reflection: latest.metrics['复盘深度'] ?? 0,
+  }
 })
 
-const scoreTrend = ref([
-  { date: '第1次', score: 65 },
-  { date: '第2次', score: 72 },
-  { date: '第3次', score: 78 },
-  { date: '第4次', score: 82 },
-])
+const scoreTrend = computed(() => {
+  const reports = reportsQuery.data.value
+  if (!reports?.length) return []
+  return [...reports]
+    .reverse()
+    .slice(-10)
+    .map((report, i) => ({
+      date: `第${i + 1}次`,
+      score: report.overall_score,
+    }))
+})
 </script>
 
 <template>

@@ -16,6 +16,8 @@ const targetRole = ref('高级前端工程师')
 const resumeFile = ref<File | null>(null)
 const jdFile = ref<File | null>(null)
 const message = ref('')
+const resumeInputRef = ref<HTMLInputElement | null>(null)
+const jdInputRef = ref<HTMLInputElement | null>(null)
 
 const resumes = computed(() => documentsQuery.data.value?.filter((item) => item.kind === 'resume') ?? [])
 const jds = computed(() => documentsQuery.data.value?.filter((item) => item.kind === 'job_description') ?? [])
@@ -47,12 +49,23 @@ const planMutation = useMutation({
 
 async function upload(kind: 'resume' | 'job-description') {
   const file = kind === 'resume' ? resumeFile.value : jdFile.value
-  if (!file) {
-    message.value = '请先选择文件'
-    return
-  }
+  if (!file) return
   message.value = ''
   uploadMutation.mutate({ kind, file })
+}
+
+function handleFileSelect(kind: 'resume' | 'job-description', event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  if (kind === 'resume') {
+    resumeFile.value = file
+  } else {
+    jdFile.value = file
+  }
+
+  upload(kind)
 }
 
 function preview(doc: DocumentItem) {
@@ -75,19 +88,41 @@ function preview(doc: DocumentItem) {
 
         <div class="glass-flat rounded-xl p-4">
           <p class="mb-3 text-sm font-semibold">简历</p>
-          <input class="text-sm" type="file" accept=".pdf,.docx,.pptx,.txt" @change="resumeFile = ($event.target as HTMLInputElement).files?.[0] ?? null" />
-          <Button class="mt-3" size="sm" :disabled="!resumeFile || uploadMutation.isPending.value" @click="upload('resume')">
+          <input
+            ref="resumeInputRef"
+            hidden
+            type="file"
+            accept=".pdf,.docx,.pptx,.txt"
+            @change="handleFileSelect('resume', $event)"
+          />
+          <Button
+            class="mt-3"
+            size="sm"
+            :disabled="uploadMutation.isPending.value"
+            @click="resumeInputRef?.click()"
+          >
             <Upload class="size-4" />
-            上传简历
+            {{ resumeFile ? resumeFile.name : '选择并上传简历' }}
           </Button>
         </div>
 
         <div class="glass-flat rounded-xl p-4">
           <p class="mb-3 text-sm font-semibold">职位 JD</p>
-          <input class="text-sm" type="file" accept=".pdf,.docx,.pptx,.txt" @change="jdFile = ($event.target as HTMLInputElement).files?.[0] ?? null" />
-          <Button class="mt-3" size="sm" :disabled="!jdFile || uploadMutation.isPending.value" @click="upload('job-description')">
+          <input
+            ref="jdInputRef"
+            hidden
+            type="file"
+            accept=".pdf,.docx,.pptx,.txt"
+            @change="handleFileSelect('job-description', $event)"
+          />
+          <Button
+            class="mt-3"
+            size="sm"
+            :disabled="uploadMutation.isPending.value"
+            @click="jdInputRef?.click()"
+          >
             <Upload class="size-4" />
-            上传 JD
+            {{ jdFile ? jdFile.name : '选择并上传 JD' }}
           </Button>
         </div>
 

@@ -36,7 +36,8 @@ async def _sse_assistant_persisted(
         finish_message(db, conversation, assistant_message, content, "done")
         yield "event: done\ndata: [DONE]\n\n"
     except asyncio.CancelledError:
-        finish_message(db, conversation, assistant_message, content or "助手回复已中断。", "error")
+        status = "done" if content else "error"
+        finish_message(db, conversation, assistant_message, content or "助手回复已中断。", status)
         raise
     except Exception as exc:
         fallback = "助手暂时无法回答，请稍后重试。"
