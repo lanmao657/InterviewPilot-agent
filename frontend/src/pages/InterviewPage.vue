@@ -1,26 +1,31 @@
 <!-- frontend/src/pages/InterviewPage.vue -->
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { Bot, Send, Sparkles } from 'lucide-vue-next'
+import { Bot, RotateCcw, Send, Sparkles } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Textarea } from '@/components/ui/textarea'
-import { api, streamApi, type Interview } from '@/lib/api'
+import { api, streamApi, type Interview, type Question } from '@/lib/api'
 
 const queryClient = useQueryClient()
 const plansQuery = useQuery({ queryKey: ['plans'], queryFn: api.plans })
 const questionsQuery = useQuery({ queryKey: ['questions'], queryFn: api.questions })
 const interview = ref<Interview | null>(null)
-const selectedQuestion = ref('请介绍一个最能体现你岗位匹配度的项目。')
+const selectedQuestion = ref('')
+const selectedQuestionId = ref<number | null>(null)
 const answer = ref('')
 const followUp = ref('')
 const streaming = ref(false)
+const showQuestionBank = ref(true)
 
 const latestTurn = computed(() => interview.value?.turns.at(-1))
 const score = computed(() => interview.value?.current_score ?? 0)
+const answeredCount = computed(() => interview.value?.turns.length ?? 0)
+const totalQuestions = computed(() => questionsQuery.data.value?.length ?? 0)
+const answerWordCount = computed(() => answer.value.trim() ? answer.value.trim().length : 0)
 
 const createMutation = useMutation({
   mutationFn: () => api.createInterview({ prep_plan_id: plansQuery.data.value?.[0]?.id, title: '文字模拟面试' }),
@@ -47,9 +52,16 @@ const reportMutation = useMutation({
   onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reports'] }),
 })
 
+function selectQuestion(question: Question) {
+  selectedQuestionId.value = question.id
+  selectedQuestion.value = question.prompt
+}
+
 async function startInterview() {
   await createMutation.mutateAsync()
-  selectedQuestion.value = questionsQuery.data.value?.[0]?.prompt ?? selectedQuestion.value
+  if (!selectedQuestion.value && questionsQuery.data.value?.length) {
+    selectQuestion(questionsQuery.data.value[0])
+  }
 }
 
 async function streamFollowUp() {
@@ -60,10 +72,23 @@ async function streamFollowUp() {
     await streamApi(`/stream/interviews/${interview.value.id}/follow-up`, (chunk) => {
       followUp.value += chunk
     })
-    if (followUp.value) selectedQuestion.value = followUp.value
   } finally {
     streaming.value = false
   }
+}
+
+function useFollowUp() {
+  if (followUp.value) {
+    selectedQuestion.value = followUp.value
+    selectedQuestionId.value = null
+  }
+}
+
+const difficultyLabel: Record<string, string> = { easy: '简单', medium: '中等', hard: '困难' }
+const difficultyVariant: Record<string, 'default' | 'accent' | 'warning'> = {
+  easy: 'default',
+  medium: 'accent',
+  hard: 'warning',
 }
 </script>
 
@@ -76,8 +101,16 @@ async function streamFollowUp() {
           <h2 class="text-lg font-semibold">模拟面试</h2>
           <p class="text-sm text-[var(--text-secondary)]">文字问答优先，AI 会根据回答生成追问</p>
         </div>
-        <Badge variant="accent" class="text-sm">当前得分 {{ score || '--' }}</Badge>
+        <div class="flex items-center gap-2">
+          <Badge v-if="answeredCount > 0" variant="default" class="text-xs">
+            已答 {{ answeredCount }}{{ totalQuestions ? `/${totalQuestions}` : '' }} 题
+          </Badge>
+          <Badge variant="accent" class="text-sm">当前得分 {{ score || '--' }}</Badge>
+        </div>
       </div>
+
+      <!-- 进度条 -->
+      <Progress v-if="totalQuestions > 0" :value="(answeredCount / totalQuestions) * 100" class="mb-5" />
 
       <div class="flex flex-col gap-5">
         <!-- 面试官问题 -->
@@ -85,12 +118,21 @@ async function streamFollowUp() {
           <div class="mb-2 flex items-center gap-2 text-sm font-semibold">
             <Bot class="size-4 text-[var(--primary)]" />
             面试官问题
+            <span v-if="selectedQuestionId" class="text-xs font-normal text-[var(--text-muted)]">
+              来自题库
+            </span>
+            <span v-else-if="followUp" class="text-xs font-normal text-[var(--text-muted)]">
+              来自追问
+            </span>
           </div>
-          <p class="text-base leading-7">{{ selectedQuestion }}</p>
+          <p class="text-base leading-7">{{ selectedQuestion || '请从右侧题库选择一道题目，或点击"开始面试"自动选择。' }}</p>
         </div>
 
         <!-- 回答输入 -->
-        <Textarea v-model="answer" class="min-h-44" placeholder="输入你的回答，尽量使用 STAR 结构并补充量化结果。" />
+        <div>
+          <Textarea v-model="answer" class="min-h-44" placeholder="输入你的回答，尽量使用 STAR 结构并补充量化结果。" />
+          <p class="mt-1 text-right text-xs text-[var(--text-muted)]">{{ answerWordCount }} 字</p>
+        </div>
 
         <!-- 操作按钮 -->
         <div class="flex flex-wrap gap-3">
@@ -98,11 +140,19 @@ async function streamFollowUp() {
             <Sparkles class="size-4" />
             {{ interview ? '重新开始' : '开始面试' }}
           </Button>
-          <Button :disabled="!interview || !answer || answerMutation.isPending.value" @click="answerMutation.mutate()">
+          <Button
+            :disabled="!interview || !answer.trim() || answerMutation.isPending.value"
+            @click="answerMutation.mutate()"
+          >
             <Send class="size-4" />
             提交回答
           </Button>
-          <Button variant="secondary" :disabled="!interview || reportMutation.isPending.value" @click="reportMutation.mutate()">
+          <Button
+            v-if="interview && answeredCount > 0"
+            variant="secondary"
+            :disabled="reportMutation.isPending.value"
+            @click="reportMutation.mutate()"
+          >
             生成报告
           </Button>
         </div>
@@ -111,6 +161,51 @@ async function streamFollowUp() {
 
     <!-- 侧边栏 -->
     <aside class="flex flex-col gap-5">
+      <!-- 题库选择 -->
+      <div class="glass rounded-2xl p-5">
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="text-base font-semibold">题库</h3>
+          <Button variant="ghost" size="sm" @click="showQuestionBank = !showQuestionBank">
+            {{ showQuestionBank ? '收起' : '展开' }}
+          </Button>
+        </div>
+        <div v-if="showQuestionBank" class="flex max-h-60 flex-col gap-2 overflow-y-auto">
+          <button
+            v-for="question in questionsQuery.data.value"
+            :key="question.id"
+            class="rounded-lg p-3 text-left text-sm transition-all"
+            :class="selectedQuestionId === question.id
+              ? 'glass-elevated ring-1 ring-[var(--primary)]'
+              : 'glass-flat hover:bg-[var(--glass-bg-hover)]'"
+            @click="selectQuestion(question)"
+          >
+            <div class="mb-1 flex items-center gap-2">
+              <Badge :variant="difficultyVariant[question.difficulty] ?? 'default'" class="text-[10px]">
+                {{ difficultyLabel[question.difficulty] ?? question.difficulty }}
+              </Badge>
+              <span class="text-[11px] text-[var(--text-muted)]">{{ question.category }}</span>
+            </div>
+            <p class="line-clamp-2 leading-5 text-[var(--text-secondary)]">{{ question.prompt }}</p>
+          </button>
+          <p v-if="!questionsQuery.data.value?.length" class="text-sm text-[var(--text-muted)]">
+            还没有题目，请先在题库页生成。
+          </p>
+        </div>
+      </div>
+
+      <!-- 追问 -->
+      <div class="glass rounded-2xl p-5">
+        <h3 class="mb-1 text-base font-semibold">追问</h3>
+        <p class="mb-3 text-xs text-[var(--text-muted)]">
+          {{ streaming ? 'AI 正在生成...' : followUp ? '根据上一轮回答动态生成' : '提交回答后自动生成追问' }}
+        </p>
+        <p v-if="followUp" class="text-sm leading-6 text-[var(--text-secondary)]">{{ followUp }}</p>
+        <Button v-if="followUp && !streaming" variant="ghost" size="sm" class="mt-2" @click="useFollowUp">
+          <RotateCcw class="size-3" />
+          使用此追问
+        </Button>
+      </div>
+
       <!-- 评分摘要 -->
       <div class="glass rounded-2xl p-5">
         <h3 class="mb-1 text-base font-semibold">评分摘要</h3>
@@ -121,17 +216,10 @@ async function streamFollowUp() {
         </p>
       </div>
 
-      <!-- 追问 -->
-      <div class="glass rounded-2xl p-5">
-        <h3 class="mb-1 text-base font-semibold">追问</h3>
-        <p class="mb-3 text-xs text-[var(--text-muted)]">{{ streaming ? 'AI 正在生成...' : '根据上一轮回答动态生成' }}</p>
-        <p class="text-sm leading-6 text-[var(--text-secondary)]">{{ followUp || '暂无追问。' }}</p>
-      </div>
-
       <!-- 最近问答 -->
       <div class="glass rounded-2xl p-5">
         <h3 class="mb-3 text-base font-semibold">最近问答</h3>
-        <div class="flex flex-col gap-3">
+        <div class="flex max-h-48 flex-col gap-3 overflow-y-auto">
           <div v-for="turn in interview?.turns" :key="turn.id" class="glass-flat rounded-lg p-3">
             <p class="text-sm font-medium">{{ turn.question }}</p>
             <p class="mt-1 text-xs text-[var(--text-muted)]">得分 {{ turn.score }}</p>

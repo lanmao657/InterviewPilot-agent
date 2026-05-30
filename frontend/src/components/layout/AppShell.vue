@@ -25,6 +25,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const sidebarOpen = ref(false)
+const showGuestLogoutConfirm = ref(false)
 
 const navItems = [
   { label: '仪表盘', path: '/dashboard', icon: Gauge },
@@ -41,8 +42,22 @@ const mobileNavItems = navItems.slice(0, 5)
 const pageTitle = computed(() => navItems.find((item) => route.path.startsWith(item.path))?.label ?? '仪表盘')
 
 function logout() {
+  if (auth.isGuest) {
+    showGuestLogoutConfirm.value = true
+    return
+  }
   auth.logout()
   router.push('/login')
+}
+
+function confirmGuestLogout() {
+  showGuestLogoutConfirm.value = false
+  auth.logout()
+  router.push('/login')
+}
+
+function cancelGuestLogout() {
+  showGuestLogoutConfirm.value = false
 }
 
 function closeSidebar() {
@@ -191,6 +206,38 @@ function closeSidebar() {
     </main>
 
     <GlobalAssistantWidget />
+
+    <!-- 游客退出确认对话框 -->
+    <Transition name="fade">
+      <div
+        v-if="showGuestLogoutConfirm"
+        class="fixed inset-0 z-[100] grid place-items-center bg-black/50 backdrop-blur-sm"
+        @click.self="cancelGuestLogout"
+      >
+        <div class="glass-elevated mx-4 w-full max-w-sm rounded-2xl p-6 animate-fade-in-up">
+          <div class="mb-4 flex items-center gap-3">
+            <div class="grid size-10 place-items-center rounded-full bg-[var(--warning)]/10">
+              <AlertTriangle class="size-5 text-[var(--warning)]" />
+            </div>
+            <div>
+              <h3 class="font-semibold">确认退出游客模式？</h3>
+              <p class="mt-1 text-xs text-[var(--text-muted)]">游客数据将在 24 小时后清除</p>
+            </div>
+          </div>
+          <p class="mb-5 text-sm text-[var(--text-secondary)]">
+            你上传的简历、面试记录和复盘报告将会丢失。建议注册正式账号保存数据。
+          </p>
+          <div class="flex gap-3">
+            <Button class="flex-1" @click="router.push('/login'); showGuestLogoutConfirm = false">
+              注册正式账号
+            </Button>
+            <Button variant="secondary" class="flex-1" @click="confirmGuestLogout">
+              仍然退出
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 

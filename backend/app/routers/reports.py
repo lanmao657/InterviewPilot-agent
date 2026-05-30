@@ -14,16 +14,41 @@ from app.services.retrieval import RetrievalService
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
-def _extract_metrics(report_data: str | dict, scores: list[int]) -> dict:
-    """从报告数据中提取各维度分数，用于雷达图展示"""
-    mapping = {"clarity": "表达结构", "structure": "岗位匹配", "evidence": "证据质量", "reflection": "复盘深度"}
+def _format_report_content(report_data: str | dict) -> str:
+    """将报告数据转为人类可读的文本"""
+    if isinstance(report_data, str):
+        return report_data
+    if not isinstance(report_data, dict):
+        return str(report_data)
 
+    parts: list[str] = []
+    if overall := report_data.get("overall"):
+        parts.append(f"【整体评价】\n{overall}")
+    if avg := report_data.get("average_scores"):
+        dim_labels = {"clarity": "表达清晰度", "structure": "结构化程度", "evidence": "证据充分度", "reflection": "复盘深度"}
+        lines = [f"  {dim_labels.get(k, k)}: {v} 分" for k, v in avg.items()]
+        parts.append("【各维度评分】\n" + "\n".join(lines))
+    if improvements := report_data.get("improvements"):
+        items = "\n".join(f"  - {item}" for item in improvements)
+        parts.append(f"【改进建议】\n{items}")
+    if next_steps := report_data.get("next_steps"):
+        items = "\n".join(f"  - {item}" for item in next_steps)
+        parts.append(f"【下一步行动计划】\n{items}")
+    return "\n\n".join(parts) if parts else json.dumps(report_data, ensure_ascii=False)
+
+
+def _extract_metrics(report_data: str | dict, scores: list[int]) -> dict:
+    """从报告数据中提取各维度分数，用于雷达图展示（英文 key）"""
     if isinstance(report_data, dict) and "average_scores" in report_data:
         avg = report_data["average_scores"]
-        return {cn_label: int(avg.get(key, 0)) for key, cn_label in mapping.items()}
-
+        return {
+            "clarity": int(avg.get("clarity", 0)),
+            "structure": int(avg.get("structure", 0)),
+            "evidence": int(avg.get("evidence", 0)),
+            "reflection": int(avg.get("reflection", 0)),
+        }
     base = round(sum(scores) / len(scores)) if scores else 0
-    return {cn_label: base for cn_label in mapping.values()}
+    return {"clarity": base, "structure": base, "evidence": base, "reflection": base}
 
 
 @router.post("/{interview_id}", response_model=ReportRead)
@@ -41,7 +66,7 @@ async def create_report(interview_id: int, user: User = Depends(get_current_user
 
     turns = [{"question": turn.question, "answer": turn.answer, "score": turn.score} for turn in interview.turns]
     report_data = await AIAgent(retrieval).build_report(interview.title, turns, user_id=user.id)
-    content = report_data if isinstance(report_data, str) else json.dumps(report_data, ensure_ascii=False)
+    content = _format_report_content(report_data)
     scores = [turn.score for turn in interview.turns]
 
     metrics = _extract_metrics(report_data, scores)

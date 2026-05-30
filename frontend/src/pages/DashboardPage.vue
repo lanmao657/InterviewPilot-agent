@@ -1,7 +1,7 @@
 <!-- frontend/src/pages/DashboardPage.vue -->
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
-import { ArrowRight, BadgeCheck, BarChart3, BookOpenCheck, FileText, MessageSquareText, Target } from 'lucide-vue-next'
+import { ArrowRight, BadgeCheck, BarChart3, BookOpenCheck, FileText, MessageSquareText, ShieldCheck, Target } from 'lucide-vue-next'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -9,8 +9,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { api } from '@/lib/api'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const auth = useAuthStore()
 const documentsQuery = useQuery({ queryKey: ['documents'], queryFn: api.documents })
 const plansQuery = useQuery({ queryKey: ['plans'], queryFn: api.plans })
 const questionsQuery = useQuery({ queryKey: ['questions'], queryFn: api.questions })
@@ -87,6 +89,18 @@ const stats = computed(() => [
       <div class="glass rounded-2xl p-6">
         <h2 class="mb-1 text-lg font-semibold">下一步行动</h2>
         <p class="mb-5 text-sm text-[var(--text-secondary)]">建议按顺序完成闭环</p>
+
+        <!-- 游客注册引导 -->
+        <div v-if="auth.isGuest" class="mb-4 rounded-xl border border-[var(--primary)]/30 bg-[var(--primary)]/5 p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <ShieldCheck class="size-4 text-[var(--primary)]" />
+            <p class="text-sm font-semibold text-[var(--primary)]">注册正式账号，永久保存数据</p>
+          </div>
+          <p class="text-xs text-[var(--text-muted)] mb-3">游客数据将在 24 小时后清除，注册后可永久保存简历、面试记录和复盘报告。</p>
+          <Button size="sm" class="w-full" @click="router.push('/login')">
+            立即注册
+          </Button>
+        </div>
 
         <div class="flex flex-col gap-3">
           <Button variant="secondary" class="justify-start" @click="router.push('/documents')">

@@ -15,10 +15,10 @@ const averageScores = computed(() => {
   const latest = reportsQuery.data.value?.[0]
   if (!latest?.metrics) return { clarity: 0, structure: 0, evidence: 0, reflection: 0 }
   return {
-    clarity: latest.metrics['表达结构'] ?? 0,
-    structure: latest.metrics['岗位匹配'] ?? 0,
-    evidence: latest.metrics['证据质量'] ?? 0,
-    reflection: latest.metrics['复盘深度'] ?? 0,
+    clarity: latest.metrics['clarity'] ?? 0,
+    structure: latest.metrics['structure'] ?? 0,
+    evidence: latest.metrics['evidence'] ?? 0,
+    reflection: latest.metrics['reflection'] ?? 0,
   }
 })
 

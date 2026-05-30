@@ -3,8 +3,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
 import * as echarts from 'echarts'
+
+import { useThemeStore } from '@/stores/theme'
 
 interface Props {
   data: {
@@ -16,19 +18,24 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const theme = useThemeStore()
 const chartRef = ref<HTMLElement>()
 let chart: echarts.ECharts | null = null
 
-const initChart = () => {
-  if (!chartRef.value) return
+const isDark = computed(() => theme.resolved === 'dark')
 
-  chart = echarts.init(chartRef.value)
-  updateChart()
-}
+const colors = computed(() => ({
+  primary: isDark.value ? '#60a5fa' : '#3b82f6',
+  primaryAlpha: isDark.value ? 'rgba(96, 165, 250, 0.3)' : 'rgba(59, 130, 246, 0.3)',
+  text: isDark.value ? '#f1f5f9' : '#1e293b',
+  textSecondary: isDark.value ? '#94a3b8' : '#64748b',
+  splitLine: isDark.value ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
+}))
 
-const updateChart = () => {
+function updateChart() {
   if (!chart) return
 
+  const c = colors.value
   const option = {
     radar: {
       indicator: [
@@ -37,6 +44,10 @@ const updateChart = () => {
         { name: '证据充分度', max: 100 },
         { name: '复盘深度', max: 100 },
       ],
+      axisName: { color: c.textSecondary },
+      splitLine: { lineStyle: { color: c.splitLine } },
+      splitArea: { show: false },
+      axisLine: { lineStyle: { color: c.splitLine } },
     },
     series: [
       {
@@ -50,33 +61,27 @@ const updateChart = () => {
               props.data.reflection,
             ],
             name: '能力维度',
-            areaStyle: {
-              color: 'rgba(59, 130, 246, 0.3)',
-            },
-            lineStyle: {
-              color: '#3b82f6',
-              width: 2,
-            },
-            itemStyle: {
-              color: '#3b82f6',
-            },
+            areaStyle: { color: c.primaryAlpha },
+            lineStyle: { color: c.primary, width: 2 },
+            itemStyle: { color: c.primary },
           },
         ],
       },
     ],
   }
 
-  chart.setOption(option)
+  chart.setOption(option, true)
 }
 
-const handleResize = () => {
-  chart?.resize()
-}
+const handleResize = () => chart?.resize()
 
 watch(() => props.data, updateChart, { deep: true })
+watch(isDark, updateChart)
 
 onMounted(() => {
-  initChart()
+  if (!chartRef.value) return
+  chart = echarts.init(chartRef.value)
+  updateChart()
   window.addEventListener('resize', handleResize)
 })
 
