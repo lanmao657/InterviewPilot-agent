@@ -90,6 +90,7 @@ class DocumentRead(BaseModel):
     kind: DocumentKind
     filename: str
     summary: dict
+    analysis: dict | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

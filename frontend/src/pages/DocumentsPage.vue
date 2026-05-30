@@ -1,9 +1,10 @@
 <!-- frontend/src/pages/DocumentsPage.vue -->
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { FileText, Upload } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, FileText, Loader2, Stethoscope, Trash2, Upload } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 
+import ResumeAnalysis from '@/components/ResumeAnalysis.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,6 +20,13 @@ const message = ref('')
 const resumeInputRef = ref<HTMLInputElement | null>(null)
 const jdInputRef = ref<HTMLInputElement | null>(null)
 
+// 展开/收起全文预览
+const expandedDocId = ref<number | null>(null)
+// 删除确认
+const deleteConfirmId = ref<number | null>(null)
+// 诊断展开
+const analyzingId = ref<number | null>(null)
+
 const resumes = computed(() => documentsQuery.data.value?.filter((item) => item.kind === 'resume') ?? [])
 const jds = computed(() => documentsQuery.data.value?.filter((item) => item.kind === 'job_description') ?? [])
 
@@ -30,6 +38,28 @@ const uploadMutation = useMutation({
   },
   onError: (err: Error) => {
     message.value = `上传失败：${err.message}`
+  },
+})
+
+const deleteMutation = useMutation({
+  mutationFn: (id: number) => api.deleteDocument(id),
+  onSuccess: () => {
+    deleteConfirmId.value = null
+    message.value = '文档已删除'
+    queryClient.invalidateQueries({ queryKey: ['documents'] })
+  },
+  onError: (err: Error) => {
+    message.value = `删除失败：${err.message}`
+  },
+})
+
+const analyzeMutation = useMutation({
+  mutationFn: (id: number) => api.analyzeDocument(id),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['documents'] })
+  },
+  onError: (err: Error) => {
+    message.value = `诊断失败：${err.message}`
   },
 })
 
@@ -70,6 +100,24 @@ function handleFileSelect(kind: 'resume' | 'job-description', event: Event) {
 
 function preview(doc: DocumentItem) {
   return String(doc.summary.preview ?? '').slice(0, 120)
+}
+
+function toggleExpand(docId: number) {
+  expandedDocId.value = expandedDocId.value === docId ? null : docId
+}
+
+function confirmDelete(docId: number) {
+  deleteConfirmId.value = docId
+}
+
+function cancelDelete() {
+  deleteConfirmId.value = null
+}
+
+// 格式化上传时间
+function formatTime(dateStr: string) {
+  const d = new Date(dateStr)
+  return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
 }
 </script>
 
@@ -129,7 +177,9 @@ function preview(doc: DocumentItem) {
         <Button :disabled="planMutation.isPending.value" @click="planMutation.mutate()">
           生成准备计划
         </Button>
-        <p v-if="message" class="text-sm text-[var(--primary)]">{{ message }}</p>
+        <p v-if="message" class="text-sm" :class="message.includes('失败') ? 'text-[var(--error)]' : 'text-[var(--primary)]'">
+          {{ message }}
+        </p>
       </div>
     </div>
 
@@ -145,16 +195,64 @@ function preview(doc: DocumentItem) {
           class="glass-flat rounded-xl p-4 animate-stagger"
           :style="{ '--stagger-index': index }"
         >
+          <!-- 文档头部信息 -->
           <div class="flex items-center justify-between gap-3">
-            <div class="flex items-center gap-2">
-              <FileText class="size-4 text-[var(--primary)]" />
-              <p class="font-medium">{{ doc.filename }}</p>
+            <div class="flex items-center gap-2 min-w-0">
+              <FileText class="size-4 shrink-0 text-[var(--primary)]" />
+              <p class="truncate font-medium">{{ doc.filename }}</p>
             </div>
-            <Badge :variant="doc.kind === 'resume' ? 'default' : 'accent'">
-              {{ doc.kind === 'resume' ? '简历' : 'JD' }}
-            </Badge>
+            <div class="flex items-center gap-2 shrink-0">
+              <Badge :variant="doc.kind === 'resume' ? 'default' : 'accent'">
+                {{ doc.kind === 'resume' ? '简历' : 'JD' }}
+              </Badge>
+              <span class="text-xs text-[var(--text-muted)]">{{ formatTime(doc.created_at) }}</span>
+            </div>
           </div>
-          <p class="mt-2 text-sm text-[var(--text-muted)]">{{ preview(doc) }}</p>
+
+          <!-- 预览文本 -->
+          <p class="mt-2 text-sm text-[var(--text-muted)]">
+            {{ expandedDocId === doc.id ? String(doc.summary.preview ?? '') : preview(doc) }}
+          </p>
+
+          <!-- 操作按钮 -->
+          <div class="mt-3 flex items-center gap-2">
+            <Button variant="ghost" size="sm" @click="toggleExpand(doc.id)">
+              <ChevronUp v-if="expandedDocId === doc.id" class="size-3" />
+              <ChevronDown v-else class="size-3" />
+              {{ expandedDocId === doc.id ? '收起' : '查看全文' }}
+            </Button>
+
+            <!-- 简历诊断按钮（仅简历类型显示） -->
+            <Button
+              v-if="doc.kind === 'resume'"
+              variant="ghost"
+              size="sm"
+              :disabled="analyzeMutation.isPending.value && analyzingId === doc.id"
+              @click="analyzeMutation.mutate(doc.id); analyzingId = doc.id"
+            >
+              <Loader2 v-if="analyzeMutation.isPending.value && analyzingId === doc.id" class="size-3 animate-spin" />
+              <Stethoscope v-else class="size-3" />
+              {{ doc.analysis ? '查看诊断' : 'AI 诊断' }}
+            </Button>
+
+            <!-- 删除确认流程 -->
+            <template v-if="deleteConfirmId === doc.id">
+              <span class="text-xs text-[var(--error)]">确认删除？</span>
+              <Button variant="ghost" size="sm" class="text-[var(--error)]" :disabled="deleteMutation.isPending.value" @click="deleteMutation.mutate(doc.id)">
+                确认
+              </Button>
+              <Button variant="ghost" size="sm" @click="cancelDelete">取消</Button>
+            </template>
+            <Button v-else variant="ghost" size="sm" class="text-[var(--text-muted)] hover:text-[var(--error)]" @click="confirmDelete(doc.id)">
+              <Trash2 class="size-3" />
+              删除
+            </Button>
+          </div>
+
+          <!-- 简历诊断结果展示 -->
+          <div v-if="doc.analysis && doc.kind === 'resume'" class="mt-4 rounded-xl glass p-4">
+            <ResumeAnalysis :data="doc.analysis as any" />
+          </div>
         </div>
         <p v-if="!documentsQuery.data.value?.length" class="text-sm text-[var(--text-muted)]">还没有上传资料。</p>
       </div>

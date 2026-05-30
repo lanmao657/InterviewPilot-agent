@@ -46,6 +46,7 @@ class Document(Base):
     filename: Mapped[str] = mapped_column(String(255))
     content: Mapped[str] = mapped_column(Text)
     summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    analysis: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="documents")

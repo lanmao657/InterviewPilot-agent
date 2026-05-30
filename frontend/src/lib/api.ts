@@ -4,7 +4,14 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000
 
 export type User = { id: number; username: string; name: string; email: string | null; is_anonymous: boolean }
 export type TokenPair = { access_token: string; refresh_token: string; token_type: string; user: User }
-export type DocumentItem = { id: number; kind: 'resume' | 'job_description'; filename: string; summary: Record<string, unknown>; created_at: string }
+export type DocumentItem = {
+  id: number
+  kind: 'resume' | 'job_description'
+  filename: string
+  summary: Record<string, unknown>
+  analysis?: Record<string, unknown> | null
+  created_at: string
+}
 export type PrepPlan = { id: number; title: string; target_role: string; fit_score: number; status: string; roadmap: Record<string, unknown>; created_at: string }
 export type Question = { id: number; prep_plan_id: number | null; category: string; difficulty: string; prompt: string; rubric: Record<string, unknown>; created_at: string }
 export type InterviewTurn = { id: number; question: string; answer: string; feedback: Record<string, unknown>; score: number; created_at: string }
@@ -105,6 +112,10 @@ export const api = {
     form.append('file', file)
     return request<DocumentItem>(`/documents/${kind}`, { method: 'POST', body: form })
   },
+  deleteDocument: (id: number) =>
+    request<void>(`/documents/${id}`, { method: 'DELETE' }),
+  analyzeDocument: (id: number) =>
+    request<DocumentItem>(`/documents/${id}/analyze`, { method: 'POST' }),
   createPlan: (payload: { resume_id?: number; job_description_id?: number; title: string; target_role: string }) =>
     request<PrepPlan>('/prep-plans', { method: 'POST', body: JSON.stringify(payload) }),
   plans: () => request<PrepPlan[]>('/prep-plans'),

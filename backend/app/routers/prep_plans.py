@@ -22,7 +22,13 @@ async def create_plan(payload: PrepPlanCreate, user: User = Depends(get_current_
     if jd and jd.user_id != user.id:
         raise HTTPException(status_code=404, detail="JD 不存在")
 
-    roadmap = await AIAgent(retrieval).build_roadmap(resume.content if resume else "", jd.content if jd else "", payload.target_role, user_id=user.id)
+    agent = AIAgent(retrieval)
+    roadmap = await agent.build_roadmap(resume.content if resume else "", jd.content if jd else "", payload.target_role, user_id=user.id)
+
+    # 从 JD 中提取关键词并存入 roadmap
+    if jd:
+        keywords_data = await agent.extract_jd_keywords(jd.content, user_id=user.id)
+        roadmap["keywords"] = keywords_data.get("keywords", [])
 
     if resume and jd:
         fit_score = await MatchingService(retrieval, db).compute_fit_score(resume.id, jd.id, user.id)

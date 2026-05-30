@@ -5,6 +5,7 @@ import { ArrowRight, BadgeCheck, BarChart3, BookOpenCheck, FileText, MessageSqua
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
+import JDKeywords, { type Keyword } from '@/components/JDKeywords.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -20,6 +21,7 @@ const reportsQuery = useQuery({ queryKey: ['reports'], queryFn: api.reports })
 
 const activePlan = computed(() => plansQuery.data.value?.[0])
 const fitScore = computed(() => activePlan.value?.fit_score ?? 68)
+const jdKeywords = computed(() => (activePlan.value?.roadmap as Record<string, unknown>)?.keywords as Keyword[] ?? [])
 
 const stats = computed(() => [
   { label: '准备计划', value: plansQuery.data.value?.length ?? 0, icon: FileText, color: 'var(--primary)' },
@@ -77,6 +79,12 @@ const stats = computed(() => [
             <p class="text-sm font-semibold">STAR Feedback</p>
             <p class="mt-1 text-xs text-[var(--text-muted)]">沉淀结构化复盘报告</p>
           </div>
+        </div>
+
+        <!-- JD 关键词标签云 -->
+        <div v-if="jdKeywords.length" class="mb-5">
+          <p class="mb-2 text-sm font-semibold text-[var(--text-secondary)]">岗位关键词</p>
+          <JDKeywords :keywords="jdKeywords" />
         </div>
 
         <Button @click="router.push('/documents')">

@@ -176,6 +176,78 @@ class AIAgent:
         ):
             yield chunk
 
+    async def analyze_resume(self, content: str, user_id: int) -> dict:
+        """简历诊断评分：分析简历各模块质量并给出改进建议"""
+        system = """你是一位资深简历顾问，请对候选人的简历进行全面诊断。
+输出 JSON 格式：
+{
+  "overall_score": 总分(0-100),
+  "modules": [
+    {"name": "模块名称", "score": 分数(0-100), "comment": "一句话评价"}
+  ],
+  "issues": ["问题1", "问题2"],
+  "suggestions": ["建议1", "建议2"]
+}
+模块至少包含：教育背景、工作经历、项目经验、技能清单。
+评分标准：量化数据、STAR 结构、关键词覆盖、排版清晰度。"""
+
+        result = await self._chat_with_rag(
+            system, f"请诊断以下简历内容：\n{content[:6000]}", user_id
+        )
+
+        try:
+            return json.loads(result)
+        except json.JSONDecodeError:
+            return self._fallback_analysis()
+
+    async def extract_jd_keywords(self, jd_content: str, user_id: int) -> dict:
+        """从 JD 中提取结构化关键词"""
+        system = """你是一位岗位分析专家，请从职位描述中提取关键要求。
+输出 JSON 格式：
+{
+  "keywords": [
+    {"term": "关键词", "category": "技术/软技能/经验/学历", "importance": "high/medium/low"}
+  ]
+}
+提取 10-20 个关键词，按重要度排序。"""
+
+        result = await self._chat_with_rag(
+            system, f"请分析以下职位描述：\n{jd_content[:4000]}", user_id
+        )
+
+        try:
+            return json.loads(result)
+        except json.JSONDecodeError:
+            return self._fallback_keywords(jd_content)
+
+    def _fallback_analysis(self) -> dict:
+        """简历诊断降级方案"""
+        return {
+            "overall_score": 65,
+            "modules": [
+                {"name": "教育背景", "score": 70, "comment": "信息完整"},
+                {"name": "工作经历", "score": 60, "comment": "缺少量化数据"},
+                {"name": "项目经验", "score": 65, "comment": "建议补充 STAR 结构"},
+                {"name": "技能清单", "score": 65, "comment": "覆盖面一般"},
+            ],
+            "issues": ["建议补充更多量化成果", "项目描述缺少 STAR 结构"],
+            "suggestions": ["用数据量化工作成果", "按 STAR 结构重写项目经历"],
+        }
+
+    def _fallback_keywords(self, jd_content: str) -> dict:
+        """关键词提取降级方案：简单分词"""
+        import re
+        words = re.findall(r'[一-鿿]{2,}|[A-Za-z][A-Za-z+#.]{2,}', jd_content)
+        seen: set[str] = set()
+        keywords: list[dict] = []
+        for word in words:
+            if word not in seen and len(word) >= 2:
+                seen.add(word)
+                keywords.append({"term": word, "category": "技术", "importance": "medium"})
+            if len(keywords) >= 15:
+                break
+        return {"keywords": keywords}
+
     def assistant_system_prompt(self) -> str:
         return (
             "你是 InterviewPilot 的 AI 面试准备教练。你只能围绕求职面试准备提供帮助："
