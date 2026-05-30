@@ -8,24 +8,45 @@ import * as echarts from 'echarts'
 
 import { useThemeStore } from '@/stores/theme'
 
-interface Props {
-  data: Array<{
-    date: string
-    score: number
-  }>
+interface TrendPoint {
+  label: string
+  overall: number
+  clarity?: number
+  structure?: number
+  evidence?: number
+  reflection?: number
 }
 
-const props = defineProps<Props>()
+interface Props {
+  data: TrendPoint[]
+  multiDimension?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), { multiDimension: false })
 const theme = useThemeStore()
 const chartRef = ref<HTMLElement>()
 let chart: echarts.ECharts | null = null
 
 const isDark = computed(() => theme.resolved === 'dark')
 
+// 多维度配色
+const dimColors = {
+  overall: { light: '#3b82f6', dark: '#60a5fa' },
+  clarity: { light: '#8b5cf6', dark: '#a78bfa' },
+  structure: { light: '#10b981', dark: '#34d399' },
+  evidence: { light: '#f59e0b', dark: '#fbbf24' },
+  reflection: { light: '#ef4444', dark: '#f87171' },
+}
+
+const dimLabels: Record<string, string> = {
+  overall: '总分',
+  clarity: '表达清晰度',
+  structure: '结构化程度',
+  evidence: '证据充分度',
+  reflection: '复盘深度',
+}
+
 const colors = computed(() => ({
-  primary: isDark.value ? '#60a5fa' : '#3b82f6',
-  gradientStart: isDark.value ? 'rgba(96, 165, 250, 0.5)' : 'rgba(59, 130, 246, 0.5)',
-  gradientEnd: isDark.value ? 'rgba(96, 165, 250, 0.1)' : 'rgba(59, 130, 246, 0.1)',
   text: isDark.value ? '#f1f5f9' : '#1e293b',
   textSecondary: isDark.value ? '#94a3b8' : '#64748b',
   splitLine: isDark.value ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
@@ -33,15 +54,55 @@ const colors = computed(() => ({
   tooltipBorder: isDark.value ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
 }))
 
+function getColor(dim: string): string {
+  const c = dimColors[dim as keyof typeof dimColors]
+  return c ? (isDark.value ? c.dark : c.light) : '#94a3b8'
+}
+
 function updateChart() {
   if (!chart) return
-
   const c = colors.value
+
+  // 构建系列数据
+  const dimensions = props.multiDimension
+    ? ['overall', 'clarity', 'structure', 'evidence', 'reflection']
+    : ['overall']
+
+  const series = dimensions.map((dim) => ({
+    name: dimLabels[dim] ?? dim,
+    data: props.data.map((item) => (item as unknown as Record<string, number>)[dim] ?? 0),
+    type: 'line' as const,
+    smooth: true,
+    lineStyle: { color: getColor(dim), width: dim === 'overall' ? 3 : 2 },
+    itemStyle: { color: getColor(dim) },
+    symbol: 'circle',
+    symbolSize: dim === 'overall' ? 8 : 5,
+    ...(dim === 'overall' && !props.multiDimension
+      ? {
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: `${getColor(dim)}80` },
+              { offset: 1, color: `${getColor(dim)}15` },
+            ]),
+          },
+        }
+      : {}),
+  }))
+
   const option = {
-    grid: { left: 48, right: 20, top: 20, bottom: 32 },
+    grid: { left: 48, right: 20, top: props.multiDimension ? 40 : 20, bottom: 32 },
+    legend: props.multiDimension
+      ? {
+          data: dimensions.map((d) => dimLabels[d] ?? d),
+          top: 0,
+          textStyle: { color: c.textSecondary, fontSize: 11 },
+          itemWidth: 16,
+          itemHeight: 2,
+        }
+      : undefined,
     xAxis: {
       type: 'category',
-      data: props.data.map((item) => item.date),
+      data: props.data.map((item) => item.label),
       axisLabel: { color: c.textSecondary },
       axisLine: { lineStyle: { color: c.splitLine } },
       axisTick: { show: false },
@@ -59,23 +120,7 @@ function updateChart() {
       borderColor: c.tooltipBorder,
       textStyle: { color: c.text },
     },
-    series: [
-      {
-        data: props.data.map((item) => item.score),
-        type: 'line',
-        smooth: true,
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: c.gradientStart },
-            { offset: 1, color: c.gradientEnd },
-          ]),
-        },
-        lineStyle: { color: c.primary, width: 3 },
-        itemStyle: { color: c.primary },
-        symbol: 'circle',
-        symbolSize: 8,
-      },
-    ],
+    series,
   }
 
   chart.setOption(option, true)

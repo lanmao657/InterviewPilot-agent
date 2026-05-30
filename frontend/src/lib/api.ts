@@ -127,6 +127,7 @@ export const api = {
   answer: (id: number, payload: { question: string; answer: string }) =>
     request<Interview>(`/interviews/${id}/answer`, { method: 'POST', body: JSON.stringify(payload) }),
   reports: () => request<Report[]>('/reports'),
+  reportTrend: () => request<Array<Record<string, number | string>>>('/reports/trend'),
   createReport: (interviewId: number) => request<Report>(`/reports/${interviewId}`, { method: 'POST' }),
   assistantContext: () => request<AssistantContext>('/assistant/context', { method: 'POST' }),
   assistantConversation: () => request<AssistantConversation>('/assistant/conversation'),

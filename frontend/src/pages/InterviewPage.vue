@@ -1,8 +1,8 @@
 <!-- frontend/src/pages/InterviewPage.vue -->
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { Bot, RotateCcw, Send, Sparkles } from 'lucide-vue-next'
-import { computed, ref } from 'vue'
+import { Bot, RotateCcw, Send, Sparkles, Timer } from 'lucide-vue-next'
+import { computed, onBeforeUnmount, ref } from 'vue'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,15 +21,65 @@ const followUp = ref('')
 const streaming = ref(false)
 const showQuestionBank = ref(true)
 
+// 计时器相关
+const timerDuration = ref(300) // 默认 5 分钟（秒）
+const timerRemaining = ref(0)
+const timerRunning = ref(false)
+const timerExpired = ref(false)
+let timerInterval: ReturnType<typeof setInterval> | null = null
+const totalTimeUsed = ref(0) // 面试总用时（秒）
+let interviewStartTime = 0
+
 const latestTurn = computed(() => interview.value?.turns.at(-1))
 const score = computed(() => interview.value?.current_score ?? 0)
 const answeredCount = computed(() => interview.value?.turns.length ?? 0)
 const totalQuestions = computed(() => questionsQuery.data.value?.length ?? 0)
 const answerWordCount = computed(() => answer.value.trim() ? answer.value.trim().length : 0)
 
+// 格式化时间显示（秒 → mm:ss）
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+// 启动计时器
+function startTimer() {
+  stopTimer()
+  timerRemaining.value = timerDuration.value
+  timerExpired.value = false
+  timerRunning.value = true
+  timerInterval = setInterval(() => {
+    timerRemaining.value--
+    if (timerRemaining.value <= 0) {
+      timerExpired.value = true
+      stopTimer()
+    }
+  }, 1000)
+}
+
+// 停止计时器
+function stopTimer() {
+  timerRunning.value = false
+  if (timerInterval) {
+    clearInterval(timerInterval)
+    timerInterval = null
+  }
+}
+
+// 计时器颜色：剩余时间不足 60 秒时变红
+const timerColor = computed(() => {
+  if (timerExpired.value) return 'var(--error)'
+  if (timerRemaining.value <= 60) return 'var(--warning)'
+  return 'var(--primary)'
+})
+
 const createMutation = useMutation({
   mutationFn: () => api.createInterview({ prep_plan_id: plansQuery.data.value?.[0]?.id, title: '文字模拟面试' }),
-  onSuccess: (data) => { interview.value = data },
+  onSuccess: (data) => {
+    interview.value = data
+    interviewStartTime = Date.now()
+  },
 })
 
 const answerMutation = useMutation({
@@ -39,14 +89,21 @@ const answerMutation = useMutation({
   },
   onSuccess: async (data) => {
     interview.value = data
+    stopTimer()
     answer.value = ''
     await streamFollowUp()
+    // 自动启动下一题计时
+    startTimer()
   },
 })
 
 const reportMutation = useMutation({
   mutationFn: () => {
     if (!interview.value) throw new Error('请先开始面试')
+    // 记录总用时
+    if (interviewStartTime) {
+      totalTimeUsed.value = Math.floor((Date.now() - interviewStartTime) / 1000)
+    }
     return api.createReport(interview.value.id)
   },
   onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reports'] }),
@@ -55,6 +112,8 @@ const reportMutation = useMutation({
 function selectQuestion(question: Question) {
   selectedQuestionId.value = question.id
   selectedQuestion.value = question.prompt
+  // 切换题目时重启计时器
+  if (interview.value) startTimer()
 }
 
 async function startInterview() {
@@ -62,6 +121,7 @@ async function startInterview() {
   if (!selectedQuestion.value && questionsQuery.data.value?.length) {
     selectQuestion(questionsQuery.data.value[0])
   }
+  startTimer()
 }
 
 async function streamFollowUp() {
@@ -90,6 +150,9 @@ const difficultyVariant: Record<string, 'default' | 'accent' | 'warning'> = {
   medium: 'accent',
   hard: 'warning',
 }
+
+// 组件销毁时清理计时器
+onBeforeUnmount(() => stopTimer())
 </script>
 
 <template>
@@ -102,6 +165,29 @@ const difficultyVariant: Record<string, 'default' | 'accent' | 'warning'> = {
           <p class="text-sm text-[var(--text-secondary)]">文字问答优先，AI 会根据回答生成追问</p>
         </div>
         <div class="flex items-center gap-2">
+          <!-- 计时器 -->
+          <div
+            v-if="interview && timerRunning"
+            class="flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-mono font-semibold"
+            :style="{ color: timerColor, background: `${timerColor}15`, border: `1px solid ${timerColor}30` }"
+          >
+            <Timer class="size-3.5" />
+            {{ formatTime(timerRemaining) }}
+          </div>
+          <div
+            v-else-if="timerExpired"
+            class="flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold text-[var(--error)] bg-[var(--error)]/10 border border-[var(--error)]/30"
+          >
+            <Timer class="size-3.5" />
+            时间到
+          </div>
+          <!-- 总用时 -->
+          <div
+            v-if="totalTimeUsed > 0"
+            class="text-xs text-[var(--text-muted)]"
+          >
+            总用时 {{ formatTime(totalTimeUsed) }}
+          </div>
           <Badge v-if="answeredCount > 0" variant="default" class="text-xs">
             已答 {{ answeredCount }}{{ totalQuestions ? `/${totalQuestions}` : '' }} 题
           </Badge>

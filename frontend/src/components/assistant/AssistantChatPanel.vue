@@ -4,6 +4,7 @@ import { nextTick, onMounted, ref, watch } from 'vue'
 
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { renderMarkdown } from '@/lib/markdown'
 import { useAssistantStore } from '@/stores/assistant'
 
 const props = withDefaults(defineProps<{ compact?: boolean }>(), {
@@ -63,10 +64,16 @@ watch(
             class="max-w-[88%] whitespace-pre-wrap rounded-xl px-4 py-2.5 text-sm leading-6"
             :class="message.role === 'user'
               ? 'bg-gradient-to-r from-[var(--primary)] to-[var(--primary-dark)] text-white'
-              : 'glass-flat'"
+              : 'glass-flat markdown-body'"
+            v-if="message.role === 'user'"
           >
-            {{ message.content || (message.status === 'streaming' ? '正在生成...' : '') }}
+            {{ message.content }}
           </div>
+          <div
+            v-else
+            class="max-w-[88%] rounded-xl px-4 py-2.5 text-sm leading-6 glass-flat markdown-body"
+            v-html="message.content ? renderMarkdown(message.content) : (message.status === 'streaming' ? '<em>正在生成...</em>' : '')"
+          />
         </div>
       </div>
     </div>

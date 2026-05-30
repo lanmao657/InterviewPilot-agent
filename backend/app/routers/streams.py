@@ -14,6 +14,45 @@ from app.services.assistant_history import add_message, finish_message, get_or_c
 
 router = APIRouter(prefix="/stream", tags=["stream"])
 
+_SENTINEL = object()
+_HEARTBEAT_INTERVAL = 15  # 心跳间隔（秒）
+
+
+async def _heartbeat_producer(queue: asyncio.Queue, interval: int = _HEARTBEAT_INTERVAL):
+    """定时发送 SSE 心跳，防止连接被中间代理断开"""
+    try:
+        while True:
+            await asyncio.sleep(interval)
+            await queue.put(_SENTINEL)
+    except asyncio.CancelledError:
+        pass
+
+
+async def _stream_with_heartbeat(content_generator):
+    """包装内容生成器，合并心跳信号"""
+    queue: asyncio.Queue = asyncio.Queue()
+    heartbeat_task = asyncio.create_task(_heartbeat_producer(queue))
+
+    async def feed_content():
+        async for chunk in content_generator:
+            await queue.put(chunk)
+        await queue.put(None)  # 结束信号
+
+    content_task = asyncio.create_task(feed_content())
+
+    try:
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            if item is _SENTINEL:
+                yield ":keepalive\n\n"
+            else:
+                yield item
+    finally:
+        heartbeat_task.cancel()
+        content_task.cancel()
+
 
 async def _sse_text(system: str, prompt: str):
     async for chunk in AIAgent().stream_chat(system, prompt):
@@ -59,7 +98,7 @@ async def stream_assistant_chat(
     assistant_message = add_message(db, conversation, "assistant", "", status="streaming")
     context = build_assistant_context(db, user)
     return StreamingResponse(
-        _sse_assistant_persisted(message, context, db, conversation, assistant_message),
+        _stream_with_heartbeat(_sse_assistant_persisted(message, context, db, conversation, assistant_message)),
         media_type="text/event-stream",
     )
 
@@ -77,7 +116,10 @@ async def stream_follow_up(interview_id: int, user: User = Depends(get_current_u
     prompt = "请给出下一道中文追问题。"
     if latest:
         prompt = f"上一题：{latest.question}\n候选人回答：{latest.answer}\n请给出一个有针对性的追问。"
-    return StreamingResponse(_sse_text("你是严格但友善的中文面试官。", prompt), media_type="text/event-stream")
+    return StreamingResponse(
+        _stream_with_heartbeat(_sse_text("你是严格但友善的中文面试官。", prompt)),
+        media_type="text/event-stream",
+    )
 
 
 @router.get("/reports/{interview_id}")
@@ -90,4 +132,7 @@ async def stream_report(interview_id: int, user: User = Depends(get_current_user
     if not interview:
         raise HTTPException(status_code=404, detail="面试会话不存在")
     turns = "\n".join(f"Q:{turn.question}\nA:{turn.answer}" for turn in interview.turns)
-    return StreamingResponse(_sse_text("你是中文面试复盘教练。", f"请生成 STAR Feedback 报告：\n{turns}"), media_type="text/event-stream")
+    return StreamingResponse(
+        _stream_with_heartbeat(_sse_text("你是中文面试复盘教练。", f"请生成 STAR Feedback 报告：\n{turns}")),
+        media_type="text/event-stream",
+    )

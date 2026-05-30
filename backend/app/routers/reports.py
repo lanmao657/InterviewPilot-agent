@@ -90,6 +90,32 @@ def list_reports(user: User = Depends(get_current_user), db: Session = Depends(g
     return list(db.scalars(select(Report).where(Report.user_id == user.id).order_by(Report.created_at.desc())).all())
 
 
+@router.get("/trend")
+def get_trend(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[dict]:
+    """返回所有报告的多维度分数时间序列，用于趋势对比图"""
+    reports = list(
+        db.scalars(
+            select(Report)
+            .where(Report.user_id == user.id)
+            .order_by(Report.created_at.asc())
+        ).all()
+    )
+    trend = []
+    for i, report in enumerate(reports):
+        metrics = report.metrics or {}
+        trend.append({
+            "index": i + 1,
+            "label": f"第{i + 1}次",
+            "date": report.created_at.strftime("%m/%d"),
+            "overall": report.overall_score,
+            "clarity": metrics.get("clarity", 0),
+            "structure": metrics.get("structure", 0),
+            "evidence": metrics.get("evidence", 0),
+            "reflection": metrics.get("reflection", 0),
+        })
+    return trend
+
+
 @router.get("/{report_id}", response_model=ReportRead)
 def get_report(report_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Report:
     report = db.get(Report, report_id)

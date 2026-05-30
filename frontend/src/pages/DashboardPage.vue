@@ -6,6 +6,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 import JDKeywords, { type Keyword } from '@/components/JDKeywords.vue'
+import ProgressGuide from '@/components/ProgressGuide.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -23,6 +24,22 @@ const activePlan = computed(() => plansQuery.data.value?.[0])
 const fitScore = computed(() => activePlan.value?.fit_score ?? 68)
 const jdKeywords = computed(() => (activePlan.value?.roadmap as Record<string, unknown>)?.keywords as Keyword[] ?? [])
 
+// 进度引导步骤
+const hasResume = computed(() => documentsQuery.data.value?.some((d) => d.kind === 'resume') ?? false)
+const hasJD = computed(() => documentsQuery.data.value?.some((d) => d.kind === 'job_description') ?? false)
+const hasPlan = computed(() => (plansQuery.data.value?.length ?? 0) > 0)
+const hasQuestions = computed(() => (questionsQuery.data.value?.length ?? 0) > 0)
+const hasReports = computed(() => (reportsQuery.data.value?.length ?? 0) > 0)
+
+const guideSteps = computed(() => [
+  { label: '上传简历', path: '/documents', done: hasResume.value },
+  { label: '上传 JD', path: '/documents', done: hasJD.value },
+  { label: '生成计划', path: '/documents', done: hasPlan.value },
+  { label: '生成题库', path: '/questions', done: hasQuestions.value },
+  { label: '模拟面试', path: '/interview', done: hasReports.value },
+  { label: '复盘报告', path: '/reports', done: hasReports.value },
+])
+
 const stats = computed(() => [
   { label: '准备计划', value: plansQuery.data.value?.length ?? 0, icon: FileText, color: 'var(--primary)' },
   { label: '资料', value: documentsQuery.data.value?.length ?? 0, icon: BookOpenCheck, color: 'var(--accent)' },
@@ -33,6 +50,9 @@ const stats = computed(() => [
 
 <template>
   <div class="flex flex-col gap-6">
+    <!-- 进度引导条 -->
+    <ProgressGuide :steps="guideSteps" />
+
     <!-- 统计卡片 -->
     <section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <div
