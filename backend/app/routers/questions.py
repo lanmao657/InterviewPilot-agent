@@ -40,3 +40,13 @@ async def generate_questions(payload: QuestionGenerateRequest, user: User = Depe
 @router.get("", response_model=list[QuestionRead])
 def list_questions(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[Question]:
     return list(db.scalars(select(Question).where(Question.user_id == user.id).order_by(Question.created_at.desc())).all())
+
+
+@router.post("/answer-cards")
+async def generate_answer_cards(user: User = Depends(get_current_user), db: Session = Depends(get_db), retrieval: RetrievalService = Depends(get_retrieval_service)) -> list[dict]:
+    """为用户题库中的题目生成 STAR 话术卡片"""
+    questions = list(db.scalars(select(Question).where(Question.user_id == user.id).order_by(Question.created_at.desc()).limit(6)).all())
+    if not questions:
+        raise HTTPException(status_code=400, detail="题库为空，请先生成题目")
+    q_dicts = [{"prompt": q.prompt, "category": q.category, "difficulty": q.difficulty} for q in questions]
+    return await AIAgent(retrieval).generate_answer_cards(q_dicts, user_id=user.id)

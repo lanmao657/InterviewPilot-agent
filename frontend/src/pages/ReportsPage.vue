@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import RadarChart from '@/components/charts/RadarChart.vue'
 import TrendChart from '@/components/charts/TrendChart.vue'
+import ShareCard from '@/components/ShareCard.vue'
 import { api } from '@/lib/api'
 
 const reportsQuery = useQuery({ queryKey: ['reports'], queryFn: api.reports })
@@ -62,6 +63,18 @@ const dimensionAnalysis = computed(() => {
 
   return { improved, needsWork }
 })
+
+// 分享成绩单数据
+const shareData = computed(() => {
+  const latest = reportsQuery.data.value?.[0]
+  return {
+    fitScore: 0, // 从 plans 获取（简化处理）
+    interviewScore: latest?.overall_score ?? 0,
+    dimensionScores: latest?.metrics ?? {},
+    totalQuestions: reportsQuery.data.value?.length ?? 0,
+    reportCount: reportsQuery.data.value?.length ?? 0,
+  }
+})
 </script>
 
 <template>
@@ -108,6 +121,9 @@ const dimensionAnalysis = computed(() => {
         </div>
       </div>
     </div>
+
+    <!-- 分享成绩单 -->
+    <ShareCard v-if="reportsQuery.data.value?.length" v-bind="shareData" />
 
     <!-- 报告列表 -->
     <div class="grid gap-4 lg:grid-cols-2">

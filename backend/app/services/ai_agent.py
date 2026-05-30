@@ -161,6 +161,33 @@ class AIAgent:
             "focusAreas": ["业务理解", "项目深挖", "结构化表达", "反问准备"],
         }
 
+    async def generate_answer_cards(self, questions: list[dict], user_id: int) -> list[dict]:
+        """为每道题生成 STAR 参考回答框架和关键词提示"""
+        q_list = "\n".join(f"{i+1}. {q['prompt']}" for i, q in enumerate(questions[:6]))
+        system = """你是面试教练，请为每道面试题生成参考回答框架。
+输出 JSON 数组，每个元素包含：
+- question: 原题
+- star_hint: STAR 结构提示（简要说明每步怎么讲）
+- keywords: 关键词列表（3-5 个）
+- sample_opening: 参考开头句"""
+        result = await self._chat_with_rag(system, f"请为以下面试题生成话术卡片：\n{q_list}", user_id)
+        try:
+            return json.loads(result)
+        except json.JSONDecodeError:
+            return self._fallback_cards(questions)
+
+    def _fallback_cards(self, questions: list[dict]) -> list[dict]:
+        """话术卡片降级方案"""
+        return [
+            {
+                "question": q.get("prompt", ""),
+                "star_hint": "S: 描述背景 → T: 明确任务 → A: 展示行动 → R: 量化结果",
+                "keywords": ["STAR 结构", "量化数据", "反思总结"],
+                "sample_opening": "让我分享一个相关的项目经历...",
+            }
+            for q in questions[:6]
+        ]
+
     async def coach_with_context(self, message: str, context: dict) -> str:
         return await self._chat(
             self.assistant_system_prompt(),

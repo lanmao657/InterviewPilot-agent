@@ -1,13 +1,14 @@
 <!-- frontend/src/pages/DocumentsPage.vue -->
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { ChevronDown, ChevronUp, FileText, Loader2, Stethoscope, Trash2, Upload } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, ClipboardPaste, FileText, Loader2, Stethoscope, Trash2, Upload } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 
 import ResumeAnalysis from '@/components/ResumeAnalysis.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { api, type DocumentItem } from '@/lib/api'
 
 const queryClient = useQueryClient()
@@ -16,6 +17,8 @@ const plansQuery = useQuery({ queryKey: ['plans'], queryFn: api.plans })
 const targetRole = ref('高级前端工程师')
 const resumeFile = ref<File | null>(null)
 const jdFile = ref<File | null>(null)
+const jdText = ref('')
+const jdTab = ref<'file' | 'text'>('file')
 const message = ref('')
 const resumeInputRef = ref<HTMLInputElement | null>(null)
 const jdInputRef = ref<HTMLInputElement | null>(null)
@@ -60,6 +63,18 @@ const analyzeMutation = useMutation({
   },
   onError: (err: Error) => {
     message.value = `诊断失败：${err.message}`
+  },
+})
+
+const jdTextMutation = useMutation({
+  mutationFn: (text: string) => api.uploadJDText(text),
+  onSuccess: () => {
+    jdText.value = ''
+    message.value = 'JD 文本上传并解析成功'
+    queryClient.invalidateQueries({ queryKey: ['documents'] })
+  },
+  onError: (err: Error) => {
+    message.value = `上传失败：${err.message}`
   },
 })
 
@@ -155,23 +170,64 @@ function formatTime(dateStr: string) {
         </div>
 
         <div class="glass-flat rounded-xl p-4">
-          <p class="mb-3 text-sm font-semibold">职位 JD</p>
-          <input
-            ref="jdInputRef"
-            hidden
-            type="file"
-            accept=".pdf,.docx,.pptx,.txt"
-            @change="handleFileSelect('job-description', $event)"
-          />
-          <Button
-            class="mt-3"
-            size="sm"
-            :disabled="uploadMutation.isPending.value"
-            @click="jdInputRef?.click()"
-          >
-            <Upload class="size-4" />
-            {{ jdFile ? jdFile.name : '选择并上传 JD' }}
-          </Button>
+          <div class="mb-3 flex items-center justify-between">
+            <p class="text-sm font-semibold">职位 JD</p>
+            <div class="flex rounded-lg bg-[var(--bg-input)] p-0.5">
+              <button
+                class="rounded-md px-2.5 py-1 text-xs font-medium transition-all"
+                :class="jdTab === 'file' ? 'bg-[var(--primary)] text-white shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'"
+                @click="jdTab = 'file'"
+              >
+                <Upload class="inline size-3 mr-1" />上传文件
+              </button>
+              <button
+                class="rounded-md px-2.5 py-1 text-xs font-medium transition-all"
+                :class="jdTab === 'text' ? 'bg-[var(--primary)] text-white shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'"
+                @click="jdTab = 'text'"
+              >
+                <ClipboardPaste class="inline size-3 mr-1" />粘贴文本
+              </button>
+            </div>
+          </div>
+
+          <!-- 文件上传模式 -->
+          <template v-if="jdTab === 'file'">
+            <input
+              ref="jdInputRef"
+              hidden
+              type="file"
+              accept=".pdf,.docx,.pptx,.txt"
+              @change="handleFileSelect('job-description', $event)"
+            />
+            <Button
+              class="mt-1"
+              size="sm"
+              :disabled="uploadMutation.isPending.value"
+              @click="jdInputRef?.click()"
+            >
+              <Upload class="size-4" />
+              {{ jdFile ? jdFile.name : '选择并上传 JD' }}
+            </Button>
+          </template>
+
+          <!-- 文本粘贴模式 -->
+          <template v-else>
+            <Textarea
+              v-model="jdText"
+              class="min-h-32 mt-1"
+              placeholder="粘贴职位描述内容，至少 10 个字符..."
+            />
+            <p class="mt-1 text-right text-xs text-[var(--text-muted)]">{{ jdText.length }} 字</p>
+            <Button
+              class="mt-2"
+              size="sm"
+              :disabled="jdText.length < 10 || jdTextMutation.isPending.value"
+              @click="jdTextMutation.mutate(jdText)"
+            >
+              <ClipboardPaste class="size-4" />
+              {{ jdTextMutation.isPending.value ? '解析中...' : '提交 JD 文本' }}
+            </Button>
+          </template>
         </div>
 
         <Button :disabled="planMutation.isPending.value" @click="planMutation.mutate()">

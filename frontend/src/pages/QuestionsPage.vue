@@ -1,9 +1,10 @@
 <!-- frontend/src/pages/QuestionsPage.vue -->
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { RefreshCw } from 'lucide-vue-next'
+import { CreditCard, RefreshCw, X } from 'lucide-vue-next'
 import { ref } from 'vue'
 
+import AnswerCard from '@/components/AnswerCard.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +16,10 @@ const count = ref(6)
 const questionsQuery = useQuery({ queryKey: ['questions'], queryFn: api.questions })
 const plansQuery = useQuery({ queryKey: ['plans'], queryFn: api.plans })
 
+// 话术卡片状态
+const answerCards = ref<Array<Record<string, unknown>>>([])
+const showCards = ref(false)
+
 const generateMutation = useMutation({
   mutationFn: () =>
     api.generateQuestions({
@@ -23,6 +28,14 @@ const generateMutation = useMutation({
       focus: focus.value,
     }),
   onSuccess: () => queryClient.invalidateQueries({ queryKey: ['questions'] }),
+})
+
+const cardMutation = useMutation({
+  mutationFn: () => api.answerCards(),
+  onSuccess: (data) => {
+    answerCards.value = data
+    showCards.value = true
+  },
 })
 
 // 难度与 Badge 变体映射
@@ -49,12 +62,40 @@ const difficultyVariant: Record<string, 'default' | 'accent' | 'warning'> = {
           题目数量
           <Input v-model.number="count" type="number" min="1" max="12" />
         </label>
-        <Button class="self-end" :disabled="generateMutation.isPending.value" @click="generateMutation.mutate()">
-          <RefreshCw class="size-4" :class="{ 'animate-spin': generateMutation.isPending.value }" />
-          生成题目
-        </Button>
+        <div class="flex gap-2 self-end">
+          <Button :disabled="generateMutation.isPending.value" @click="generateMutation.mutate()">
+            <RefreshCw class="size-4" :class="{ 'animate-spin': generateMutation.isPending.value }" />
+            生成题目
+          </Button>
+          <Button
+            variant="secondary"
+            :disabled="!questionsQuery.data.value?.length || cardMutation.isPending.value"
+            @click="cardMutation.mutate()"
+          >
+            <CreditCard class="size-4" />
+            话术卡片
+          </Button>
+        </div>
       </div>
     </div>
+
+    <!-- 话术卡片展示 -->
+    <Transition name="page">
+      <section v-if="showCards" class="glass rounded-2xl p-6">
+        <div class="mb-4 flex items-center justify-between">
+          <div>
+            <h3 class="text-base font-semibold">STAR 话术卡片</h3>
+            <p class="text-xs text-[var(--text-muted)]">每道题的参考回答框架和关键词提示</p>
+          </div>
+          <Button variant="ghost" size="icon" @click="showCards = false">
+            <X class="size-4" />
+          </Button>
+        </div>
+        <div class="grid gap-4 md:grid-cols-2">
+          <AnswerCard :cards="(answerCards as any)" />
+        </div>
+      </section>
+    </Transition>
 
     <!-- 题目列表 -->
     <section class="grid gap-4 lg:grid-cols-2">

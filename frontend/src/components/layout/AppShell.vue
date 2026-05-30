@@ -19,6 +19,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import GlobalAssistantWidget from '@/components/assistant/GlobalAssistantWidget.vue'
 import ThemeToggle from '@/components/layout/ThemeToggle.vue'
 import { Button } from '@/components/ui/button'
+import ToastContainer from '@/components/ui/toast/ToastContainer.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -206,6 +207,7 @@ function closeSidebar() {
     </main>
 
     <GlobalAssistantWidget />
+    <ToastContainer />
 
     <!-- 游客退出确认对话框 -->
     <Transition name="fade">

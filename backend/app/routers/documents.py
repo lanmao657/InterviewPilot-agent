@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,12 @@ from app.services.retrieval import RetrievalService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+class JDTextInput(BaseModel):
+    """JD 纯文本输入"""
+    text: str = Field(min_length=10, max_length=50000)
+    filename: str = "pasted-jd.txt"
 
 
 async def _save_document(kind: DocumentKind, file: UploadFile, user: User, db: Session) -> Document:
@@ -50,6 +57,32 @@ async def upload_resume(file: UploadFile = File(...), user: User = Depends(get_c
 @router.post("/job-description", response_model=DocumentRead)
 async def upload_jd(file: UploadFile = File(...), user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Document:
     return await _save_document(DocumentKind.job_description, file, user, db)
+
+
+@router.post("/job-description-text", response_model=DocumentRead)
+async def upload_jd_text(payload: JDTextInput, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Document:
+    """通过纯文本上传 JD（支持直接粘贴）"""
+    text = payload.text.strip()
+    doc = Document(
+        user_id=user.id,
+        kind=DocumentKind.job_description,
+        filename=payload.filename,
+        content=text,
+        summary=summarize_document(text, "job_description"),
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+
+    # 异步处理切片和向量化
+    try:
+        embedding_service = EmbeddingService()
+        document_service = DocumentService(embedding_service, db)
+        await document_service.process_document(doc.id)
+    except Exception as e:
+        logger.error(f"文档切片处理失败: {e}")
+
+    return doc
 
 
 @router.get("", response_model=list[DocumentRead])

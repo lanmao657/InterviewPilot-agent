@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/auth'
+import { useToastStore } from '@/stores/toast'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api'
 
@@ -88,11 +89,15 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   try {
     response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers })
   } catch {
-    throw new Error('无法连接服务器，请确认后端服务已启动')
+    const msg = '无法连接服务器，请确认后端服务已启动'
+    try { useToastStore().error(msg) } catch { /* store 未初始化时静默 */ }
+    throw new Error(msg)
   }
   if (!response.ok) {
     const data = await response.json().catch(() => ({ detail: '请求失败' }))
-    throw new Error(formatApiError(data))
+    const msg = formatApiError(data)
+    try { useToastStore().error(msg) } catch { /* store 未初始化时静默 */ }
+    throw new Error(msg)
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
@@ -116,12 +121,15 @@ export const api = {
     request<void>(`/documents/${id}`, { method: 'DELETE' }),
   analyzeDocument: (id: number) =>
     request<DocumentItem>(`/documents/${id}/analyze`, { method: 'POST' }),
+  uploadJDText: (text: string) =>
+    request<DocumentItem>('/documents/job-description-text', { method: 'POST', body: JSON.stringify({ text }) }),
   createPlan: (payload: { resume_id?: number; job_description_id?: number; title: string; target_role: string }) =>
     request<PrepPlan>('/prep-plans', { method: 'POST', body: JSON.stringify(payload) }),
   plans: () => request<PrepPlan[]>('/prep-plans'),
   generateQuestions: (payload: { prep_plan_id?: number; count: number; focus: string }) =>
     request<Question[]>('/questions/generate', { method: 'POST', body: JSON.stringify(payload) }),
   questions: () => request<Question[]>('/questions'),
+  answerCards: () => request<Array<Record<string, unknown>>>('/questions/answer-cards', { method: 'POST' }),
   createInterview: (payload: { prep_plan_id?: number; title: string }) =>
     request<Interview>('/interviews', { method: 'POST', body: JSON.stringify(payload) }),
   answer: (id: number, payload: { question: string; answer: string }) =>
