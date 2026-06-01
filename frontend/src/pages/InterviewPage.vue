@@ -1,7 +1,7 @@
 <!-- frontend/src/pages/InterviewPage.vue -->
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { Bot, RotateCcw, Send, Sparkles, Timer } from 'lucide-vue-next'
+import { Bot, RefreshCw, RotateCcw, Send, Sparkles, Timer } from 'lucide-vue-next'
 import { computed, onBeforeUnmount, ref } from 'vue'
 
 import { Badge } from '@/components/ui/badge'
@@ -322,10 +322,16 @@ onBeforeUnmount(() => stopTimer())
           {{ streaming ? 'AI 正在生成...' : followUp ? '根据上一轮回答动态生成' : '提交回答后自动生成追问' }}
         </p>
         <p v-if="followUp" class="text-sm leading-6 text-[var(--text-secondary)]">{{ followUp }}</p>
-        <Button v-if="followUp && !streaming" variant="ghost" size="sm" class="mt-2" @click="useFollowUp">
-          <RotateCcw class="size-3" />
-          使用此追问
-        </Button>
+        <div v-if="!streaming" class="mt-2 flex gap-2">
+          <Button v-if="followUp" variant="ghost" size="sm" @click="useFollowUp">
+            <RotateCcw class="size-3" />
+            使用此追问
+          </Button>
+          <Button v-if="interview" variant="ghost" size="sm" :disabled="streaming" @click="streamFollowUp">
+            <RefreshCw class="size-3" />
+            重新生成
+          </Button>
+        </div>
       </div>
 
       <!-- 评分摘要（练习模式显示） -->
@@ -333,7 +339,35 @@ onBeforeUnmount(() => stopTimer())
         <h3 class="mb-1 text-base font-semibold">评分摘要</h3>
         <p class="mb-3 text-xs text-[var(--text-muted)]">即时反馈会沉淀到报告</p>
         <Progress :value="score" class="mb-3" />
-        <p class="text-sm text-[var(--text-secondary)]">
+
+        <!-- 四维评分详情 -->
+        <div v-if="latestTurn?.feedback?.dimensions" class="mb-3 flex flex-col gap-2">
+          <div v-for="(dimScore, dimKey) in latestTurn.feedback.dimensions" :key="dimKey" class="flex items-center gap-2">
+            <span class="w-16 shrink-0 text-xs text-[var(--text-muted)]">
+              {{ dimKey === 'clarity' ? '表达清晰' : dimKey === 'structure' ? '结构化' : dimKey === 'evidence' ? '证据充分' : '复盘深度' }}
+            </span>
+            <Progress :value="Number(dimScore)" class="h-1.5 flex-1" />
+            <span class="w-8 text-right text-xs font-semibold">{{ dimScore }}</span>
+          </div>
+        </div>
+
+        <!-- 优点 -->
+        <div v-if="Array.isArray(latestTurn?.feedback?.strengths) && latestTurn.feedback.strengths.length" class="mb-2">
+          <p class="text-xs font-semibold text-[var(--success)]">优点</p>
+          <ul class="mt-1 flex flex-col gap-0.5">
+            <li v-for="(s, i) in (latestTurn.feedback.strengths as string[])" :key="i" class="text-xs text-[var(--text-secondary)]">- {{ s }}</li>
+          </ul>
+        </div>
+
+        <!-- 改进建议 -->
+        <div v-if="Array.isArray(latestTurn?.feedback?.improvements) && latestTurn.feedback.improvements.length" class="mb-2">
+          <p class="text-xs font-semibold text-[var(--warning)]">改进建议</p>
+          <ul class="mt-1 flex flex-col gap-0.5">
+            <li v-for="(s, i) in (latestTurn.feedback.improvements as string[])" :key="i" class="text-xs text-[var(--text-secondary)]">- {{ s }}</li>
+          </ul>
+        </div>
+
+        <p v-if="!latestTurn?.feedback?.dimensions" class="text-sm text-[var(--text-secondary)]">
           {{ latestTurn?.feedback?.summary ?? '提交第一段回答后查看 STAR Feedback。' }}
         </p>
       </div>

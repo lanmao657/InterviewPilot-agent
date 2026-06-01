@@ -48,6 +48,16 @@ def build_assistant_context(db: Session, user: User) -> dict:
                 "title": recent_interview.title,
                 "currentScore": recent_interview.current_score,
                 "turnCount": len(recent_interview.turns),
+                # 包含最近面试的所有轮次，让助手能回答"我刚才第X题哪里答得不好"等问题
+                "turns": [
+                    {
+                        "question": turn.question,
+                        "answer": turn.answer[:800],
+                        "score": turn.score,
+                        "feedback": turn.feedback,
+                    }
+                    for turn in recent_interview.turns[-5:]  # 最近 5 轮
+                ],
                 "latestTurn": (
                     {
                         "question": recent_interview.turns[-1].question,

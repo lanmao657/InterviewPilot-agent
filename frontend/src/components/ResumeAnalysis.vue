@@ -1,11 +1,10 @@
 <!-- frontend/src/components/ResumeAnalysis.vue -->
-<!-- 简历诊断评分组件 -->
+<!-- 简历诊断评分组件：含柱状图可视化 -->
 <script setup lang="ts">
 import { AlertCircle, CheckCircle, Lightbulb } from 'lucide-vue-next'
 import { computed } from 'vue'
 
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 
 interface AnalysisModule {
   name: string
@@ -41,6 +40,9 @@ function scoreLevel(score: number): string {
 const sortedModules = computed(() =>
   [...(props.data.modules ?? [])].sort((a, b) => a.score - b.score)
 )
+
+// 柱状图颜色：从弱到强的渐变
+const barColors = ['var(--error)', 'var(--warning)', 'var(--accent)', 'var(--success)']
 </script>
 
 <template>
@@ -61,7 +63,30 @@ const sortedModules = computed(() =>
       </div>
     </div>
 
-    <!-- 各模块得分 -->
+    <!-- 柱状图可视化 -->
+    <div v-if="data.modules?.length" class="rounded-xl glass-flat p-4">
+      <p class="mb-3 text-sm font-semibold text-[var(--text-secondary)]">各模块评分对比</p>
+      <div class="flex items-end gap-3" style="height: 120px;">
+        <div
+          v-for="mod in data.modules"
+          :key="mod.name"
+          class="flex flex-1 flex-col items-center justify-end gap-1"
+        >
+          <span class="text-xs font-bold" :style="{ color: scoreColor(mod.score) }">{{ mod.score }}</span>
+          <div
+            class="w-full rounded-t-lg transition-all duration-500"
+            :style="{
+              height: `${Math.max(mod.score * 1.0, 8)}px`,
+              background: barColors[Math.min(Math.floor(mod.score / 25), 3)],
+              opacity: 0.8,
+            }"
+          />
+          <span class="mt-1 text-[10px] text-[var(--text-muted)] text-center leading-tight">{{ mod.name }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 各模块得分详情 -->
     <div class="flex flex-col gap-3">
       <p class="text-sm font-semibold text-[var(--text-secondary)]">各模块评分</p>
       <div v-for="mod in sortedModules" :key="mod.name" class="flex flex-col gap-1.5">
@@ -69,7 +94,12 @@ const sortedModules = computed(() =>
           <span class="font-medium">{{ mod.name }}</span>
           <span class="font-semibold" :style="{ color: scoreColor(mod.score) }">{{ mod.score }} 分</span>
         </div>
-        <Progress :value="mod.score" class="h-2" />
+        <div class="h-2 w-full overflow-hidden rounded-full bg-[var(--bg-input)]">
+          <div
+            class="h-full rounded-full transition-all duration-500"
+            :style="{ width: `${mod.score}%`, background: scoreColor(mod.score) }"
+          />
+        </div>
         <p class="text-xs text-[var(--text-muted)]">{{ mod.comment }}</p>
       </div>
     </div>

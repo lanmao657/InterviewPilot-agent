@@ -1,7 +1,7 @@
 <!-- frontend/src/pages/DocumentsPage.vue -->
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { ChevronDown, ChevronUp, ClipboardPaste, FileText, Loader2, Stethoscope, Trash2, Upload } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, ClipboardPaste, FileText, Loader2, Sparkles, Stethoscope, Trash2, Upload } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 
 import ResumeAnalysis from '@/components/ResumeAnalysis.vue'
@@ -63,6 +63,25 @@ const analyzeMutation = useMutation({
   },
   onError: (err: Error) => {
     message.value = `诊断失败：${err.message}`
+  },
+})
+
+// 简历优化重写
+const rewritingId = ref<number | null>(null)
+const rewriteDocId = ref<number | null>(null)
+const rewriteData = ref<Record<string, unknown> | null>(null)
+const rewriteMutation = useMutation({
+  mutationFn: (id: number) => api.rewriteDocument(id),
+  onSuccess: (data) => {
+    rewriteData.value = data as unknown as Record<string, unknown>
+  },
+  onError: (err: Error) => {
+    message.value = `优化失败：${err.message}`
+    rewriteData.value = null
+    rewriteDocId.value = null
+  },
+  onSettled: () => {
+    rewritingId.value = null
   },
 })
 
@@ -288,7 +307,20 @@ function formatTime(dateStr: string) {
             >
               <Loader2 v-if="analyzeMutation.isPending.value && analyzingId === doc.id" class="size-3 animate-spin" />
               <Stethoscope v-else class="size-3" />
-              {{ doc.analysis ? '查看诊断' : 'AI 诊断' }}
+              {{ doc.analysis ? '重新诊断' : 'AI 诊断' }}
+            </Button>
+
+            <!-- 简历优化按钮（仅简历类型显示） -->
+            <Button
+              v-if="doc.kind === 'resume'"
+              variant="ghost"
+              size="sm"
+              :disabled="rewriteMutation.isPending.value && rewritingId === doc.id"
+              @click="rewriteMutation.mutate(doc.id); rewritingId = doc.id; rewriteDocId = doc.id; rewriteData = null"
+            >
+              <Loader2 v-if="rewriteMutation.isPending.value && rewritingId === doc.id" class="size-3 animate-spin" />
+              <Sparkles v-else class="size-3" />
+              简历优化
             </Button>
 
             <!-- 删除确认流程 -->
@@ -308,6 +340,29 @@ function formatTime(dateStr: string) {
           <!-- 简历诊断结果展示 -->
           <div v-if="doc.analysis && doc.kind === 'resume'" class="mt-4 rounded-xl glass p-4">
             <ResumeAnalysis :data="doc.analysis as any" />
+          </div>
+
+          <!-- 简历优化结果展示 -->
+          <div v-if="rewriteData && rewriteDocId === doc.id && doc.kind === 'resume'" class="mt-4 rounded-xl glass p-4">
+            <p class="mb-2 text-sm font-semibold text-[var(--text-secondary)]">简历优化建议</p>
+            <p class="mb-3 text-xs text-[var(--text-muted)]">{{ String(rewriteData.overall_suggestion ?? '') }}</p>
+            <div v-if="(rewriteData.ats_score_estimate as number) > 0" class="mb-3 flex items-center gap-2">
+              <span class="text-xs text-[var(--text-muted)]">ATS 评分预估</span>
+              <span class="text-lg font-bold text-[var(--primary)]">{{ rewriteData.ats_score_estimate }}</span>
+            </div>
+            <div v-if="(rewriteData.missing_keywords as string[])?.length" class="mb-3">
+              <p class="text-xs font-semibold text-[var(--warning)]">建议补充关键词</p>
+              <div class="mt-1 flex flex-wrap gap-1.5">
+                <span v-for="kw in (rewriteData.missing_keywords as string[])" :key="kw" class="rounded-full bg-[var(--warning)]/10 px-2 py-0.5 text-[11px] text-[var(--warning)]">
+                  {{ kw }}
+                </span>
+              </div>
+            </div>
+            <div v-for="(rw, i) in (rewriteData.rewrites as Array<Record<string, string>>)" :key="i" class="mb-3 rounded-lg glass-flat p-3">
+              <p class="text-xs text-[var(--text-muted)]">原文：{{ rw.original }}</p>
+              <p class="mt-1 text-sm text-[var(--success)]">优化：{{ rw.rewritten }}</p>
+              <p class="mt-1 text-xs text-[var(--primary)]">原因：{{ rw.reason }}</p>
+            </div>
           </div>
         </div>
         <p v-if="!documentsQuery.data.value?.length" class="text-sm text-[var(--text-muted)]">还没有上传资料。</p>

@@ -150,16 +150,34 @@ class AIAgent:
     async def build_roadmap(
         self, resume_text: str, jd_text: str, target_role: str, user_id: int
     ) -> dict:
-        """构建路线图（基于 RAG）"""
+        """构建路线图（基于 RAG），由 LLM 根据简历和 JD 动态生成"""
         prompt = f"候选人简历：{resume_text[:2500]}\n岗位 JD：{jd_text[:2500]}\n目标岗位：{target_role}"
-        content = await self._chat_with_rag(
-            "你是中文 AI 面试教练，请输出简洁的准备路线。", prompt, user_id
-        )
-        return {
-            "summary": content[:900],
-            "milestones": ["岗位匹配分析", "高频题训练", "STAR 表达打磨", "模拟面试复盘"],
-            "focusAreas": ["业务理解", "项目深挖", "结构化表达", "反问准备"],
-        }
+        system = """你是中文 AI 面试教练，请根据候选人的简历和目标 JD，输出针对性的准备路线。
+严格按 JSON 格式输出：
+{
+  "summary": "一句话总结候选人与岗位的匹配情况",
+  "milestones": ["阶段1", "阶段2", "阶段3", "阶段4"],
+  "focusAreas": ["重点1", "重点2", "重点3", "重点4"],
+  "strengths": ["优势1", "优势2"],
+  "gaps": ["差距1", "差距2"]
+}
+milestones 要按时间顺序排列，每个阶段要具体可执行。
+focusAreas 要针对该岗位的核心能力要求。
+strengths/gaps 要基于简历和 JD 的实际对比。"""
+
+        result = await self._chat_with_rag(system, prompt, user_id)
+
+        try:
+            return json.loads(result)
+        except json.JSONDecodeError:
+            # 降级：尝试提取部分内容
+            return {
+                "summary": result[:900] if result else "建议先完善简历和 JD 信息",
+                "milestones": ["岗位匹配分析", "高频题训练", "STAR 表达打磨", "模拟面试复盘"],
+                "focusAreas": ["业务理解", "项目深挖", "结构化表达", "反问准备"],
+                "strengths": [],
+                "gaps": [],
+            }
 
     async def generate_answer_cards(self, questions: list[dict], user_id: int) -> list[dict]:
         """为每道题生成 STAR 参考回答框架和关键词提示"""
@@ -227,6 +245,33 @@ class AIAgent:
         except json.JSONDecodeError:
             return self._fallback_analysis()
 
+    async def analyze_jd_match(self, resume_text: str, jd_text: str, user_id: int) -> dict:
+        """JD 匹配差距分析：对比简历与 JD 要求，标出覆盖项和缺失项"""
+        system = """你是岗位匹配分析专家，请对比候选人的简历和 JD，分析匹配情况。
+输出 JSON 格式：
+{
+  "matched": [{"requirement": "JD要求", "evidence": "简历中的相关证据"}],
+  "gaps": [{"requirement": "JD要求", "severity": "high/medium/low", "suggestion": "如何弥补"}],
+  "summary": "一句话总结匹配情况"
+}
+matched 列出简历已覆盖的 JD 要求，gaps 列出未覆盖的要求。
+severity: high=核心要求缺失, medium=重要但可弥补, low=加分项缺失。"""
+
+        result = await self._chat_with_rag(
+            system,
+            f"候选人简历：\n{resume_text[:3000]}\n\n目标 JD：\n{jd_text[:3000]}",
+            user_id,
+        )
+
+        try:
+            return json.loads(result)
+        except json.JSONDecodeError:
+            return {
+                "matched": [],
+                "gaps": [],
+                "summary": "分析失败，请重试",
+            }
+
     async def extract_jd_keywords(self, jd_content: str, user_id: int) -> dict:
         """从 JD 中提取结构化关键词"""
         system = """你是一位岗位分析专家，请从职位描述中提取关键要求。
@@ -246,6 +291,41 @@ class AIAgent:
             return json.loads(result)
         except json.JSONDecodeError:
             return self._fallback_keywords(jd_content)
+
+    async def rewrite_resume(self, resume_text: str, jd_text: str, user_id: int) -> dict:
+        """简历优化重写：根据 JD 优化简历内容，输出改写建议"""
+        system = """你是资深简历优化顾问，请根据目标 JD 优化候选人的简历内容。
+输出 JSON 格式：
+{
+  "overall_suggestion": "一句话总评",
+  "rewrites": [
+    {
+      "original": "原文片段",
+      "rewritten": "优化后的文字",
+      "reason": "修改原因"
+    }
+  ],
+  "missing_keywords": ["建议补充的关键词1", "关键词2"],
+  "ats_score_estimate": 85
+}
+rewrites 至少给出 3 处具体修改建议，要贴近原始内容。
+missing_keywords 列出 JD 中有但简历缺失的关键词。"""
+
+        result = await self._chat_with_rag(
+            system,
+            f"候选人简历：\n{resume_text[:3000]}\n\n目标 JD：\n{jd_text[:3000]}",
+            user_id,
+        )
+
+        try:
+            return json.loads(result)
+        except json.JSONDecodeError:
+            return {
+                "overall_suggestion": "请重试",
+                "rewrites": [],
+                "missing_keywords": [],
+                "ats_score_estimate": 0,
+            }
 
     def _fallback_analysis(self) -> dict:
         """简历诊断降级方案"""

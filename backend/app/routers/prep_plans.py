@@ -13,6 +13,22 @@ from app.services.retrieval import RetrievalService
 router = APIRouter(prefix="/prep-plans", tags=["prep-plans"])
 
 
+@router.post("/jd-match")
+async def analyze_jd_match(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    retrieval: RetrievalService = Depends(get_retrieval_service),
+) -> dict:
+    """JD 匹配差距分析：对比用户最新简历和 JD"""
+    from app.models import DocumentKind
+    resume = db.scalar(select(Document).where(Document.user_id == user.id, Document.kind == DocumentKind.resume).order_by(Document.created_at.desc()).limit(1))
+    jd = db.scalar(select(Document).where(Document.user_id == user.id, Document.kind == DocumentKind.job_description).order_by(Document.created_at.desc()).limit(1))
+    if not resume or not jd:
+        raise HTTPException(status_code=400, detail="请先上传简历和 JD")
+    agent = AIAgent(retrieval)
+    return await agent.analyze_jd_match(resume.content, jd.content, user_id=user.id)
+
+
 @router.post("", response_model=PrepPlanRead)
 async def create_plan(payload: PrepPlanCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db), retrieval: RetrievalService = Depends(get_retrieval_service)) -> PrepPlan:
     resume = db.get(Document, payload.resume_id) if payload.resume_id else None

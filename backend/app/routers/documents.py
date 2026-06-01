@@ -97,22 +97,46 @@ async def analyze_document(
     db: Session = Depends(get_db),
     retrieval: RetrievalService = Depends(get_retrieval_service),
 ) -> Document:
-    """对文档进行 AI 诊断评分（仅限简历类型）"""
+    """对文档进行 AI 诊断评分（仅限简历类型），支持重复诊断"""
     doc = db.get(Document, document_id)
     if not doc or doc.user_id != user.id:
         raise HTTPException(status_code=404, detail="文档不存在")
     if doc.kind != DocumentKind.resume:
         raise HTTPException(status_code=400, detail="仅支持简历文档的诊断")
 
-    # 如果已有诊断结果，直接返回
-    if doc.analysis:
-        return doc
-
+    # 每次都重新诊断，不使用缓存
     analysis = await AIAgent(retrieval).analyze_resume(doc.content, user_id=user.id)
     doc.analysis = analysis
     db.commit()
     db.refresh(doc)
     return doc
+
+
+@router.post("/{document_id}/rewrite")
+async def rewrite_document(
+    document_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    retrieval: RetrievalService = Depends(get_retrieval_service),
+) -> dict:
+    """简历优化重写：根据 JD 给出具体的改写建议"""
+    doc = db.get(Document, document_id)
+    if not doc or doc.user_id != user.id:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    if doc.kind != DocumentKind.resume:
+        raise HTTPException(status_code=400, detail="仅支持简历文档的优化")
+
+    # 获取用户最新的 JD
+    jd = db.scalar(
+        select(Document)
+        .where(Document.user_id == user.id, Document.kind == DocumentKind.job_description)
+        .order_by(Document.created_at.desc())
+        .limit(1)
+    )
+    jd_text = jd.content if jd else ""
+
+    agent = AIAgent(retrieval)
+    return await agent.rewrite_resume(doc.content, jd_text, user_id=user.id)
 
 
 @router.delete("/{document_id}", status_code=204)

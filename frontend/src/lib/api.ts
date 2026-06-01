@@ -1,7 +1,7 @@
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 export type User = { id: number; username: string; name: string; email: string | null; is_anonymous: boolean }
 export type TokenPair = { access_token: string; refresh_token: string; token_type: string; user: User }
@@ -121,11 +121,14 @@ export const api = {
     request<void>(`/documents/${id}`, { method: 'DELETE' }),
   analyzeDocument: (id: number) =>
     request<DocumentItem>(`/documents/${id}/analyze`, { method: 'POST' }),
+  rewriteDocument: (id: number) =>
+    request<{ overall_suggestion: string; rewrites: Array<{ original: string; rewritten: string; reason: string }>; missing_keywords: string[]; ats_score_estimate: number }>(`/documents/${id}/rewrite`, { method: 'POST' }),
   uploadJDText: (text: string) =>
     request<DocumentItem>('/documents/job-description-text', { method: 'POST', body: JSON.stringify({ text }) }),
   createPlan: (payload: { resume_id?: number; job_description_id?: number; title: string; target_role: string }) =>
     request<PrepPlan>('/prep-plans', { method: 'POST', body: JSON.stringify(payload) }),
   plans: () => request<PrepPlan[]>('/prep-plans'),
+  jdMatch: () => request<{ matched: Array<{ requirement: string; evidence: string }>; gaps: Array<{ requirement: string; severity: string; suggestion: string }>; summary: string }>('/prep-plans/jd-match', { method: 'POST' }),
   generateQuestions: (payload: { prep_plan_id?: number; count: number; focus: string }) =>
     request<Question[]>('/questions/generate', { method: 'POST', body: JSON.stringify(payload) }),
   questions: () => request<Question[]>('/questions'),
@@ -134,6 +137,7 @@ export const api = {
     request<Interview>('/interviews', { method: 'POST', body: JSON.stringify(payload) }),
   answer: (id: number, payload: { question: string; answer: string }) =>
     request<Interview>(`/interviews/${id}/answer`, { method: 'POST', body: JSON.stringify(payload) }),
+  answerHistory: () => request<Array<{ interview_id: number; interview_title: string; turn_id: number; question: string; answer: string; score: number; feedback_summary: string; created_at: string }>>('/interviews/history/answers'),
   reports: () => request<Report[]>('/reports'),
   reportTrend: () => request<Array<Record<string, number | string>>>('/reports/trend'),
   createReport: (interviewId: number) => request<Report>(`/reports/${interviewId}`, { method: 'POST' }),

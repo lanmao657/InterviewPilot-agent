@@ -1,11 +1,12 @@
 <!-- frontend/src/pages/DashboardPage.vue -->
 <script setup lang="ts">
-import { useQuery } from '@tanstack/vue-query'
-import { ArrowRight, BadgeCheck, BarChart3, BookOpenCheck, FileText, MessageSquareText, ShieldCheck, Target } from 'lucide-vue-next'
-import { computed } from 'vue'
+import { useMutation, useQuery } from '@tanstack/vue-query'
+import { ArrowRight, BadgeCheck, BarChart3, BookOpenCheck, FileText, GitCompareArrows, Loader2, MessageSquareText, ShieldCheck, Target } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import JDKeywords, { type Keyword } from '@/components/JDKeywords.vue'
+import JDMatchAnalysis from '@/components/JDMatchAnalysis.vue'
 import ProgressGuide from '@/components/ProgressGuide.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,17 @@ const reportsQuery = useQuery({ queryKey: ['reports'], queryFn: api.reports })
 const activePlan = computed(() => plansQuery.data.value?.[0])
 const fitScore = computed(() => activePlan.value?.fit_score ?? 68)
 const jdKeywords = computed(() => (activePlan.value?.roadmap as Record<string, unknown>)?.keywords as Keyword[] ?? [])
+
+// JD 匹配差距分析
+const showMatchAnalysis = ref(false)
+const matchData = ref<{ matched: Array<{ requirement: string; evidence: string }>; gaps: Array<{ requirement: string; severity: string; suggestion: string }>; summary: string } | null>(null)
+const matchMutation = useMutation({
+  mutationFn: () => api.jdMatch(),
+  onSuccess: (data) => {
+    matchData.value = data
+    showMatchAnalysis.value = true
+  },
+})
 
 // 进度引导步骤
 const hasResume = computed(() => documentsQuery.data.value?.some((d) => d.kind === 'resume') ?? false)
@@ -106,6 +118,25 @@ const stats = computed(() => [
           <p class="mb-2 text-sm font-semibold text-[var(--text-secondary)]">岗位关键词</p>
           <JDKeywords :keywords="jdKeywords" />
         </div>
+
+        <!-- JD 匹配差距分析 -->
+        <div class="mb-5 flex gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            :disabled="matchMutation.isPending.value"
+            @click="matchMutation.mutate()"
+          >
+            <Loader2 v-if="matchMutation.isPending.value" class="size-3 animate-spin" />
+            <GitCompareArrows v-else class="size-3" />
+            匹配差距分析
+          </Button>
+        </div>
+        <Transition name="page">
+          <div v-if="showMatchAnalysis && matchData" class="mb-5 rounded-xl glass-flat p-4">
+            <JDMatchAnalysis :data="matchData as any" />
+          </div>
+        </Transition>
 
         <Button @click="router.push('/documents')">
           完善资料

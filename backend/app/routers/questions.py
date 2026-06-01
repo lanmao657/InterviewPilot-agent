@@ -18,6 +18,12 @@ async def generate_questions(payload: QuestionGenerateRequest, user: User = Depe
         plan = db.get(PrepPlan, payload.prep_plan_id)
         if not plan or plan.user_id != user.id:
             raise HTTPException(status_code=404, detail="准备计划不存在")
+    # 清除用户旧题目，每次生成替换而非追加
+    old_questions = db.scalars(select(Question).where(Question.user_id == user.id)).all()
+    for q in old_questions:
+        db.delete(q)
+    db.flush()
+
     generated = await AIAgent(retrieval).generate_questions(payload.focus, payload.count, user_id=user.id)
     questions = [
         Question(
