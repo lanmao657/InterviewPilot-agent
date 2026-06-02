@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.logging import get_logger
 from app.deps import get_current_user, get_retrieval_service
 from app.models import Document, PrepPlan, User
 from app.schemas import PrepPlanCreate, PrepPlanRead
@@ -11,6 +12,7 @@ from app.services.matching import MatchingService
 from app.services.retrieval import RetrievalService
 
 router = APIRouter(prefix="/prep-plans", tags=["prep-plans"])
+logger = get_logger(__name__)
 
 
 @router.post("/jd-match")
@@ -39,15 +41,33 @@ async def create_plan(payload: PrepPlanCreate, user: User = Depends(get_current_
         raise HTTPException(status_code=404, detail="JD 不存在")
 
     agent = AIAgent(retrieval)
-    roadmap = await agent.build_roadmap(resume.content if resume else "", jd.content if jd else "", payload.target_role, user_id=user.id)
+
+    try:
+        roadmap = await agent.build_roadmap(resume.content if resume else "", jd.content if jd else "", payload.target_role, user_id=user.id)
+    except Exception as exc:
+        logger.error("build_roadmap_failed", error=str(exc), exc_info=True)
+        roadmap = {
+            "summary": "AI 分析暂时不可用，请稍后重试",
+            "milestones": ["岗位匹配分析", "高频题训练", "STAR 表达打磨", "模拟面试复盘"],
+            "focusAreas": ["业务理解", "项目深挖", "结构化表达", "反问准备"],
+            "strengths": [],
+            "gaps": [],
+        }
 
     # 从 JD 中提取关键词并存入 roadmap
     if jd:
-        keywords_data = await agent.extract_jd_keywords(jd.content, user_id=user.id)
-        roadmap["keywords"] = keywords_data.get("keywords", [])
+        try:
+            keywords_data = await agent.extract_jd_keywords(jd.content, user_id=user.id)
+            roadmap["keywords"] = keywords_data.get("keywords", [])
+        except Exception as exc:
+            logger.error("extract_jd_keywords_failed", error=str(exc), exc_info=True)
+            roadmap["keywords"] = []
 
     if resume and jd:
-        fit_score = await MatchingService(retrieval, db).compute_fit_score(resume.id, jd.id, user.id)
+        try:
+            fit_score = await MatchingService(retrieval, db).compute_fit_score(resume.id, jd.id, user.id)
+        except Exception:
+            fit_score = 68
     else:
         fit_score = 68
 

@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import AsyncGenerator
 from typing import Optional
 
@@ -12,6 +13,14 @@ class AIAgent:
     def __init__(self, retrieval_service: Optional[RetrievalService] = None):
         self.settings = get_settings()
         self.retrieval_service = retrieval_service
+
+    @staticmethod
+    def _strip_code_fences(text: str) -> str:
+        """Strip markdown code fences (```json ... ```) from LLM output."""
+        text = text.strip()
+        text = re.sub(r"^```(?:json|JSON)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+        return text.strip()
 
     async def _chat(self, system: str, user: str) -> str:
         if not self.settings.ai_api_key:
@@ -98,7 +107,7 @@ class AIAgent:
         result = await self._chat_with_rag(system, f"训练重点：{focus}", user_id)
 
         try:
-            return json.loads(result)
+            return json.loads(self._strip_code_fences(result))
         except json.JSONDecodeError:
             # 降级到固定模板
             return self._fallback_questions(focus, count)
@@ -119,7 +128,7 @@ class AIAgent:
         )
 
         try:
-            return json.loads(result)
+            return json.loads(self._strip_code_fences(result))
         except json.JSONDecodeError:
             return self._fallback_score()
 
@@ -143,7 +152,7 @@ class AIAgent:
         )
 
         try:
-            return json.loads(result)
+            return json.loads(self._strip_code_fences(result))
         except json.JSONDecodeError:
             return self._fallback_report(title, turns)
 
@@ -168,7 +177,7 @@ strengths/gaps 要基于简历和 JD 的实际对比。"""
         result = await self._chat_with_rag(system, prompt, user_id)
 
         try:
-            return json.loads(result)
+            return json.loads(self._strip_code_fences(result))
         except json.JSONDecodeError:
             # 降级：尝试提取部分内容
             return {
@@ -190,7 +199,7 @@ strengths/gaps 要基于简历和 JD 的实际对比。"""
 - sample_opening: 参考开头句"""
         result = await self._chat_with_rag(system, f"请为以下面试题生成话术卡片：\n{q_list}", user_id)
         try:
-            return json.loads(result)
+            return json.loads(self._strip_code_fences(result))
         except json.JSONDecodeError:
             return self._fallback_cards(questions)
 
@@ -241,7 +250,7 @@ strengths/gaps 要基于简历和 JD 的实际对比。"""
         )
 
         try:
-            return json.loads(result)
+            return json.loads(self._strip_code_fences(result))
         except json.JSONDecodeError:
             return self._fallback_analysis()
 
@@ -264,7 +273,7 @@ severity: high=核心要求缺失, medium=重要但可弥补, low=加分项缺�
         )
 
         try:
-            return json.loads(result)
+            return json.loads(self._strip_code_fences(result))
         except json.JSONDecodeError:
             return {
                 "matched": [],
@@ -288,7 +297,7 @@ severity: high=核心要求缺失, medium=重要但可弥补, low=加分项缺�
         )
 
         try:
-            return json.loads(result)
+            return json.loads(self._strip_code_fences(result))
         except json.JSONDecodeError:
             return self._fallback_keywords(jd_content)
 
@@ -318,7 +327,7 @@ missing_keywords 列出 JD 中有但简历缺失的关键词。"""
         )
 
         try:
-            return json.loads(result)
+            return json.loads(self._strip_code_fences(result))
         except json.JSONDecodeError:
             return {
                 "overall_suggestion": "请重试",

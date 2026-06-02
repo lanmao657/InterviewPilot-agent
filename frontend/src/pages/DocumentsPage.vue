@@ -1,8 +1,9 @@
 <!-- frontend/src/pages/DocumentsPage.vue -->
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { ChevronDown, ChevronUp, ClipboardPaste, FileText, Loader2, Sparkles, Stethoscope, Trash2, Upload } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, ClipboardPaste, Eye, FileText, Loader2, Sparkles, Stethoscope, Trash2, Upload } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 import ResumeAnalysis from '@/components/ResumeAnalysis.vue'
 import { Badge } from '@/components/ui/badge'
@@ -12,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { api, type DocumentItem } from '@/lib/api'
 
 const queryClient = useQueryClient()
+const router = useRouter()
 const documentsQuery = useQuery({ queryKey: ['documents'], queryFn: api.documents })
 const plansQuery = useQuery({ queryKey: ['plans'], queryFn: api.plans })
 const targetRole = ref('高级前端工程师')
@@ -262,6 +264,26 @@ function formatTime(dateStr: string) {
     <div class="glass rounded-2xl p-6">
       <h2 class="text-lg font-semibold">资料库</h2>
       <p class="mb-5 text-sm text-[var(--text-secondary)]">最新计划数：{{ plansQuery.data.value?.length ?? 0 }}</p>
+
+      <!-- 准备计划列表 -->
+      <div v-if="plansQuery.data.value?.length" class="mb-4 flex flex-col gap-2">
+        <p class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">准备计划</p>
+        <div
+          v-for="plan in plansQuery.data.value"
+          :key="plan.id"
+          class="glass-flat rounded-xl p-3 flex items-center justify-between gap-2 cursor-pointer transition-all duration-200 hover:border-[var(--primary)] hover:translate-x-1"
+          @click="router.push(`/plans/${plan.id}`)"
+        >
+          <div class="flex items-center gap-2 min-w-0">
+            <FileText class="size-4 shrink-0 text-[var(--primary)]" />
+            <p class="truncate text-sm font-medium">{{ plan.title }}</p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <Badge variant="accent" class="text-[11px]">Fit {{ plan.fit_score }}</Badge>
+            <Eye class="size-3.5 text-[var(--text-muted)]" />
+          </div>
+        </div>
+      </div>
 
       <div class="flex flex-col gap-3">
         <div

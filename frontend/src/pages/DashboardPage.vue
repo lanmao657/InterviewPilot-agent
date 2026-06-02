@@ -84,13 +84,18 @@ const stats = computed(() => [
     <!-- 主要内容区 -->
     <section class="grid gap-5 xl:grid-cols-[1.3fr_0.7fr]">
       <!-- 当前计划 -->
-      <div class="glass-elevated rounded-2xl p-6">
+      <div
+        class="glass-elevated rounded-2xl p-6 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+        @click="activePlan ? router.push(`/plans/${activePlan.id}`) : undefined"
+      >
         <div class="mb-5 flex items-start justify-between">
           <div>
             <h2 class="text-lg font-semibold">当前准备计划</h2>
             <p class="text-sm text-[var(--text-secondary)]">{{ activePlan?.target_role ?? '上传简历与 JD 后生成专属路线' }}</p>
           </div>
-          <Badge variant="accent" class="text-sm">Fit Score {{ fitScore }}</Badge>
+          <div class="flex items-center gap-2">
+            <Badge variant="accent" class="text-sm">Fit Score {{ fitScore }}</Badge>
+          </div>
         </div>
 
         <Progress :value="fitScore" class="mb-5" />
@@ -138,10 +143,16 @@ const stats = computed(() => [
           </div>
         </Transition>
 
-        <Button @click="router.push('/documents')">
-          完善资料
-          <ArrowRight class="size-4" />
-        </Button>
+        <div class="flex gap-2">
+          <Button v-if="activePlan" @click.stop="router.push(`/plans/${activePlan.id}`)">
+            查看详情
+            <ArrowRight class="size-4" />
+          </Button>
+          <Button variant="secondary" @click="router.push('/documents')">
+            完善资料
+            <ArrowRight class="size-4" />
+          </Button>
+        </div>
       </div>
 
       <!-- 下一步行动 -->

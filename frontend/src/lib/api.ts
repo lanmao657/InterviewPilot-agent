@@ -128,6 +128,7 @@ export const api = {
   createPlan: (payload: { resume_id?: number; job_description_id?: number; title: string; target_role: string }) =>
     request<PrepPlan>('/prep-plans', { method: 'POST', body: JSON.stringify(payload) }),
   plans: () => request<PrepPlan[]>('/prep-plans'),
+  getPlan: (id: number) => request<PrepPlan>(`/prep-plans/${id}`),
   jdMatch: () => request<{ matched: Array<{ requirement: string; evidence: string }>; gaps: Array<{ requirement: string; severity: string; suggestion: string }>; summary: string }>('/prep-plans/jd-match', { method: 'POST' }),
   generateQuestions: (payload: { prep_plan_id?: number; count: number; focus: string }) =>
     request<Question[]>('/questions/generate', { method: 'POST', body: JSON.stringify(payload) }),
