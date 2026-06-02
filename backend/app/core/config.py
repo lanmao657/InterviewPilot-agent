@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     access_token_minutes: int = 30
     refresh_token_days: int = 14
 
-    ai_base_url: str = "https://api.deepseek.com"
+    ai_base_url: str = "https://api.deepseek.com/v1"
     ai_api_key: str | None = None
     ai_model: str = "deepseek-v4-pro"
 

@@ -15,7 +15,7 @@ class DocumentChunk(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     chunk_index: Mapped[int] = mapped_column(Integer)
     content: Mapped[str] = mapped_column(Text)
-    embedding: Mapped[list] = mapped_column(Vector(1536))
+    embedding: Mapped[list] = mapped_column(Vector(1024))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

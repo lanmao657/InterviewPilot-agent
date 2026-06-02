@@ -6,7 +6,10 @@ from app.core.config import get_settings
 class EmbeddingService:
     def __init__(self) -> None:
         self.settings = get_settings()
-        self.client = openai.AsyncOpenAI(api_key=self.settings.ai_api_key)
+        self.client = openai.AsyncOpenAI(
+            api_key=self.settings.embedding_api_key or self.settings.ai_api_key,
+            base_url=self.settings.embedding_base_url or self.settings.ai_base_url,
+        )
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         """Call OpenAI Embedding API and return vector list."""
