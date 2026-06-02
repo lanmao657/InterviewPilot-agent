@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git worktree *)",
+      "Bash(handle .claude/worktrees)",
+      "Bash(powershell -Command \"Remove-Item -Recurse -Force '.claude\\\\worktrees'\")",
+      "Bash(tasklist)",
+      "Bash(git merge *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(python -c \"from app.core.config import get_settings; s = get_settings\\(\\); print\\(f'embedding_model: {s.embedding_model}'\\); print\\(f'embedding_dimensions: {s.embedding_dimensions}'\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"from app.core.config import get_settings; s = get_settings\\(\\); print\\(f'embedding_model: {s.embedding_model}'\\); print\\(f'embedding_dimensions: {s.embedding_dimensions}'\\)\")",
+      "Bash(rm -rf node_modules)",
+      "Bash(npm install *)",
+      "Bash(npx vue-tsc *)",
+      "Bash(npm run *)"
+    ]
+  }
+}
