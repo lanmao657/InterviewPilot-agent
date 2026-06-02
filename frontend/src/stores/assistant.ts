@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { reactive } from 'vue'
 
 import { api, streamApi, type AssistantMessage as ApiAssistantMessage } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
@@ -90,13 +91,13 @@ export const useAssistantStore = defineStore('assistant', {
       this.isStreaming = true
       this.messages.push({ id: newId(), role: 'user', content, createdAt: new Date().toISOString(), status: 'done' })
 
-      const assistantMessage: AssistantMessage = {
+      const assistantMessage = reactive<AssistantMessage>({
         id: newId(),
         role: 'assistant',
         content: '',
         createdAt: new Date().toISOString(),
         status: 'streaming',
-      }
+      })
       this.messages.push(assistantMessage)
 
       try {

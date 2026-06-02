@@ -1,5 +1,5 @@
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -10,12 +10,12 @@ from app.services.embedding import EmbeddingService
 from app.services.retrieval import RetrievalService
 
 settings = get_settings()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_prefix}/auth/login")
+bearer_scheme = HTTPBearer()
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+def get_current_user(cred=Depends(bearer_scheme), db: Session = Depends(get_db)) -> User:
     try:
-        user_id = int(decode_token(token, "access"))
+        user_id = int(decode_token(cred.credentials, "access"))
     except (ValueError, TypeError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录已失效")
     user = db.get(User, user_id)
