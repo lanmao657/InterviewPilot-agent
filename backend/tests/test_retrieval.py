@@ -1,6 +1,13 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from app.services.retrieval import RetrievalService
+from app.services.retrieval import RetrievalService, clear_rag_cache
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    clear_rag_cache()
+    yield
+    clear_rag_cache()
 
 
 @pytest.fixture

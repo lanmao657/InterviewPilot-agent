@@ -27,13 +27,15 @@ class Settings(BaseSettings):
     access_token_minutes: int = 30
     refresh_token_days: int = 14
 
-    ai_base_url: str = "https://api.openai.com/v1"
+    ai_base_url: str = "https://api.deepseek.com"
     ai_api_key: str | None = None
-    ai_model: str = "gpt-4.1-mini"
+    ai_model: str = "deepseek-v4-pro"
 
-    # Embedding 配置
-    embedding_model: str = "text-embedding-3-small"
-    embedding_dimensions: int = 1536
+    # Embedding 配置（独立于 chat，可使用不同服务商）
+    embedding_base_url: str | None = None  # 为空时回退到 ai_base_url
+    embedding_api_key: str | None = None   # 为空时回退到 ai_api_key
+    embedding_model: str = "text-embedding-v4"
+    embedding_dimensions: int = 1024
 
     model_config = SettingsConfigDict(
         env_file=(PROJECT_ROOT / ".env", BACKEND_ROOT / ".env"),

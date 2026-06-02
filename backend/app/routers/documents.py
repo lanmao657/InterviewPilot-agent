@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -5,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.deps import get_current_user, get_retrieval_service
 from app.models import Document, DocumentKind, User
 from app.schemas import DocumentRead
@@ -25,6 +26,19 @@ class JDTextInput(BaseModel):
     filename: str = "pasted-jd.txt"
 
 
+async def _process_embedding(document_id: int) -> None:
+    """后台任务：独立 session 完成切片+向量化"""
+    db = SessionLocal()
+    try:
+        embedding_service = EmbeddingService()
+        document_service = DocumentService(embedding_service, db)
+        await document_service.process_document(document_id)
+    except Exception as e:
+        logger.error(f"文档切片处理失败: {e}")
+    finally:
+        db.close()
+
+
 async def _save_document(kind: DocumentKind, file: UploadFile, user: User, db: Session) -> Document:
     text = await extract_upload_text(file)
     doc = Document(
@@ -38,13 +52,8 @@ async def _save_document(kind: DocumentKind, file: UploadFile, user: User, db: S
     db.commit()
     db.refresh(doc)
 
-    # 异步处理切片和向量化（失败不影响文档上传）
-    try:
-        embedding_service = EmbeddingService()
-        document_service = DocumentService(embedding_service, db)
-        await document_service.process_document(doc.id)
-    except Exception as e:
-        logger.error(f"文档切片处理失败: {e}")
+    # 后台异步处理切片和向量化，不阻塞响应
+    asyncio.create_task(_process_embedding(doc.id))
 
     return doc
 
@@ -74,13 +83,8 @@ async def upload_jd_text(payload: JDTextInput, user: User = Depends(get_current_
     db.commit()
     db.refresh(doc)
 
-    # 异步处理切片和向量化
-    try:
-        embedding_service = EmbeddingService()
-        document_service = DocumentService(embedding_service, db)
-        await document_service.process_document(doc.id)
-    except Exception as e:
-        logger.error(f"文档切片处理失败: {e}")
+    # 后台异步处理切片和向量化，不阻塞响应
+    asyncio.create_task(_process_embedding(doc.id))
 
     return doc
 

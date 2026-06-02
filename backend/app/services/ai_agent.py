@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from collections.abc import AsyncGenerator
@@ -160,19 +161,10 @@ class AIAgent:
         self, resume_text: str, jd_text: str, target_role: str, user_id: int
     ) -> dict:
         """构建路线图（基于 RAG），由 LLM 根据简历和 JD 动态生成"""
-        prompt = f"候选人简历：{resume_text[:2500]}\n岗位 JD：{jd_text[:2500]}\n目标岗位：{target_role}"
-        system = """你是中文 AI 面试教练，请根据候选人的简历和目标 JD，输出针对性的准备路线。
-严格按 JSON 格式输出：
-{
-  "summary": "一句话总结候选人与岗位的匹配情况",
-  "milestones": ["阶段1", "阶段2", "阶段3", "阶段4"],
-  "focusAreas": ["重点1", "重点2", "重点3", "重点4"],
-  "strengths": ["优势1", "优势2"],
-  "gaps": ["差距1", "差距2"]
-}
-milestones 要按时间顺序排列，每个阶段要具体可执行。
-focusAreas 要针对该岗位的核心能力要求。
-strengths/gaps 要基于简历和 JD 的实际对比。"""
+        prompt = f"简历：{resume_text[:2500]}\nJD：{jd_text[:2500]}\n岗位：{target_role}"
+        system = """中文面试教练，根据简历和JD输出准备路线。JSON格式：
+{"summary":"一句话匹配总结","milestones":["阶段1","阶段2","阶段3","阶段4"],"focusAreas":["重点1","重点2","重点3","重点4"],"strengths":["优势1","优势2"],"gaps":["差距1","差距2"]}
+要求：milestones按时间排序且可执行，focusAreas针对核心能力，strengths/gaps基于实际对比。"""
 
         result = await self._chat_with_rag(system, prompt, user_id)
 
@@ -189,19 +181,25 @@ strengths/gaps 要基于简历和 JD 的实际对比。"""
             }
 
     async def generate_answer_cards(self, questions: list[dict], user_id: int) -> list[dict]:
-        """为每道题生成 STAR 参考回答框架和关键词提示"""
-        q_list = "\n".join(f"{i+1}. {q['prompt']}" for i, q in enumerate(questions[:6]))
-        system = """你是面试教练，请为每道面试题生成参考回答框架。
-输出 JSON 数组，每个元素包含：
-- question: 原题
-- star_hint: STAR 结构提示（简要说明每步怎么讲）
-- keywords: 关键词列表（3-5 个）
-- sample_opening: 参考开头句"""
-        result = await self._chat_with_rag(system, f"请为以下面试题生成话术卡片：\n{q_list}", user_id)
-        try:
-            return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
-            return self._fallback_cards(questions)
+        """为每道题并行生成 STAR 参考回答框架和关键词提示"""
+        system = """你是面试教练，请为面试题生成参考回答框架。
+输出 JSON：{"question":"原题","star_hint":"STAR结构提示","keywords":["关键词1","关键词2","关键词3"],"sample_opening":"参考开头句"}
+star_hint 用一句话说明 S→T→A→R 每步怎么讲。"""
+
+        async def _gen_one(q: dict) -> dict:
+            try:
+                result = await self._chat_with_rag(system, q["prompt"], user_id)
+                return json.loads(self._strip_code_fences(result))
+            except Exception:
+                return {
+                    "question": q.get("prompt", ""),
+                    "star_hint": "S: 描述背景 → T: 明确任务 → A: 展示行动 → R: 量化结果",
+                    "keywords": ["STAR 结构", "量化数据", "反思总结"],
+                    "sample_opening": "让我分享一个相关的项目经历...",
+                }
+
+        results = await asyncio.gather(*[_gen_one(q) for q in questions[:6]])
+        return list(results)
 
     def _fallback_cards(self, questions: list[dict]) -> list[dict]:
         """话术卡片降级方案"""
@@ -246,7 +244,7 @@ strengths/gaps 要基于简历和 JD 的实际对比。"""
 评分标准：量化数据、STAR 结构、关键词覆盖、排版清晰度。"""
 
         result = await self._chat_with_rag(
-            system, f"请诊断以下简历内容：\n{content[:6000]}", user_id
+            system, content[:6000], user_id
         )
 
         try:
@@ -256,19 +254,13 @@ strengths/gaps 要基于简历和 JD 的实际对比。"""
 
     async def analyze_jd_match(self, resume_text: str, jd_text: str, user_id: int) -> dict:
         """JD 匹配差距分析：对比简历与 JD 要求，标出覆盖项和缺失项"""
-        system = """你是岗位匹配分析专家，请对比候选人的简历和 JD，分析匹配情况。
-输出 JSON 格式：
-{
-  "matched": [{"requirement": "JD要求", "evidence": "简历中的相关证据"}],
-  "gaps": [{"requirement": "JD要求", "severity": "high/medium/low", "suggestion": "如何弥补"}],
-  "summary": "一句话总结匹配情况"
-}
-matched 列出简历已覆盖的 JD 要求，gaps 列出未覆盖的要求。
-severity: high=核心要求缺失, medium=重要但可弥补, low=加分项缺失。"""
+        system = """岗位匹配分析。JSON格式：
+{"matched":[{"requirement":"JD要求","evidence":"简历证据"}],"gaps":[{"requirement":"JD要求","severity":"high/medium/low","suggestion":"弥补建议"}],"summary":"一句话总结"}
+matched=已覆盖，gaps=未覆盖。severity: high=核心缺失, medium=可弥补, low=加分项。"""
 
         result = await self._chat_with_rag(
             system,
-            f"候选人简历：\n{resume_text[:3000]}\n\n目标 JD：\n{jd_text[:3000]}",
+            f"简历：\n{resume_text[:3000]}\n\nJD：\n{jd_text[:3000]}",
             user_id,
         )
 
@@ -283,10 +275,10 @@ severity: high=核心要求缺失, medium=重要但可弥补, low=加分项缺�
 
     async def extract_jd_keywords(self, jd_content: str, user_id: int) -> dict:
         """从 JD 中提取结构化关键词"""
-        system = "从职位描述中提取 5-8 个最重要的关键词，按 JSON 输出：{\"keywords\": [{\"term\": \"词\", \"category\": \"技术/软技能/经验\", \"importance\": \"high/medium\"}]}"
+        system = "从JD提取5-8个关键词，JSON：{\"keywords\":[{\"term\":\"词\",\"category\":\"技术/软技能/经验\",\"importance\":\"high/medium\"}]}"
 
         result = await self._chat_with_rag(
-            system, f"请分析以下职位描述：\n{jd_content[:4000]}", user_id
+            system, jd_content[:4000], user_id
         )
 
         try:
@@ -315,7 +307,7 @@ missing_keywords 列出 JD 中有但简历缺失的关键词。"""
 
         result = await self._chat_with_rag(
             system,
-            f"候选人简历：\n{resume_text[:3000]}\n\n目标 JD：\n{jd_text[:3000]}",
+            f"简历：\n{resume_text[:3000]}\n\nJD：\n{jd_text[:3000]}",
             user_id,
         )
 

@@ -127,6 +127,46 @@ export const api = {
     request<DocumentItem>('/documents/job-description-text', { method: 'POST', body: JSON.stringify({ text }) }),
   createPlan: (payload: { resume_id?: number; job_description_id?: number; title: string; target_role: string }) =>
     request<PrepPlan>('/prep-plans', { method: 'POST', body: JSON.stringify(payload) }),
+  createPlanStream: async (
+    payload: { resume_id?: number; job_description_id?: number; title: string; target_role: string },
+    onEvent: (event: string, data: unknown) => void,
+  ): Promise<PrepPlan> => {
+    const auth = useAuthStore()
+    const response = await fetch(`${API_BASE_URL}/prep-plans/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.accessToken}` },
+      body: JSON.stringify(payload),
+    })
+    if (!response.ok) throw new Error('流式请求失败')
+    const reader = response.body!.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let plan: PrepPlan | null = null
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const events = buffer.split('\n\n')
+      buffer = events.pop() ?? ''
+      for (const block of events) {
+        const lines = block.split('\n')
+        const eventLine = lines.find((l) => l.startsWith('event: '))
+        const dataLine = lines.find((l) => l.startsWith('data: '))
+        if (!eventLine || !dataLine) continue
+        const eventName = eventLine.replace('event: ', '').trim()
+        const rawData = dataLine.replace('data: ', '')
+        try {
+          const parsed = JSON.parse(rawData)
+          if (eventName === 'done') {
+            plan = parsed
+          }
+          onEvent(eventName, parsed)
+        } catch { /* ignore parse errors */ }
+      }
+    }
+    if (!plan) throw new Error('计划生成失败')
+    return plan
+  },
   plans: () => request<PrepPlan[]>('/prep-plans'),
   getPlan: (id: number) => request<PrepPlan>(`/prep-plans/${id}`),
   jdMatch: () => request<{ matched: Array<{ requirement: string; evidence: string }>; gaps: Array<{ requirement: string; severity: string; suggestion: string }>; summary: string }>('/prep-plans/jd-match', { method: 'POST' }),

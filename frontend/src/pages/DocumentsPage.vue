@@ -1,7 +1,7 @@
 <!-- frontend/src/pages/DocumentsPage.vue -->
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { ChevronDown, ChevronUp, ClipboardPaste, Eye, FileText, Loader2, Sparkles, Stethoscope, Trash2, Upload } from 'lucide-vue-next'
+import { BadgeCheck, ChevronDown, ChevronUp, ClipboardPaste, Eye, FileText, Loader2, Sparkles, Stethoscope, Trash2, Upload } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -22,6 +22,7 @@ const jdFile = ref<File | null>(null)
 const jdText = ref('')
 const jdTab = ref<'file' | 'text'>('file')
 const message = ref('')
+const planProgress = ref({ fit_score: false, keywords: false, roadmap: false })
 const resumeInputRef = ref<HTMLInputElement | null>(null)
 const jdInputRef = ref<HTMLInputElement | null>(null)
 
@@ -100,16 +101,29 @@ const jdTextMutation = useMutation({
 })
 
 const planMutation = useMutation({
-  mutationFn: () =>
-    api.createPlan({
-      resume_id: resumes.value[0]?.id,
-      job_description_id: jds.value[0]?.id,
-      title: `${targetRole.value} 面试准备计划`,
-      target_role: targetRole.value,
-    }),
+  mutationFn: async () => {
+    planProgress.value = { fit_score: false, keywords: false, roadmap: false }
+    return api.createPlanStream(
+      {
+        resume_id: resumes.value[0]?.id,
+        job_description_id: jds.value[0]?.id,
+        title: `${targetRole.value} 面试准备计划`,
+        target_role: targetRole.value,
+      },
+      (event) => {
+        if (event in planProgress.value) {
+          planProgress.value[event as keyof typeof planProgress.value] = true
+        }
+      },
+    )
+  },
   onSuccess: () => {
     message.value = '准备计划已生成'
+    planProgress.value = { fit_score: false, keywords: false, roadmap: false }
     queryClient.invalidateQueries({ queryKey: ['plans'] })
+  },
+  onError: () => {
+    planProgress.value = { fit_score: false, keywords: false, roadmap: false }
   },
 })
 
@@ -252,8 +266,26 @@ function formatTime(dateStr: string) {
         </div>
 
         <Button :disabled="planMutation.isPending.value" @click="planMutation.mutate()">
-          生成准备计划
+          <Loader2 v-if="planMutation.isPending.value" class="size-4 animate-spin" />
+          {{ planMutation.isPending.value ? '生成中...' : '生成准备计划' }}
         </Button>
+        <div v-if="planMutation.isPending.value" class="flex flex-col gap-1.5 mt-2">
+          <div class="flex items-center gap-2 text-xs">
+            <Loader2 v-if="!planProgress.fit_score" class="size-3 animate-spin text-[var(--text-muted)]" />
+            <BadgeCheck v-else class="size-3 text-[var(--success)]" />
+            <span :class="planProgress.fit_score ? 'text-[var(--success)]' : 'text-[var(--text-muted)]'">匹配度计算</span>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            <Loader2 v-if="!planProgress.keywords" class="size-3 animate-spin text-[var(--text-muted)]" />
+            <BadgeCheck v-else class="size-3 text-[var(--success)]" />
+            <span :class="planProgress.keywords ? 'text-[var(--success)]' : 'text-[var(--text-muted)]'">关键词提取</span>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            <Loader2 v-if="!planProgress.roadmap" class="size-3 animate-spin text-[var(--text-muted)]" />
+            <BadgeCheck v-else class="size-3 text-[var(--success)]" />
+            <span :class="planProgress.roadmap ? 'text-[var(--success)]' : 'text-[var(--text-muted)]'">路线图生成</span>
+          </div>
+        </div>
         <p v-if="message" class="text-sm" :class="message.includes('失败') ? 'text-[var(--error)]' : 'text-[var(--primary)]'">
           {{ message }}
         </p>

@@ -1,8 +1,19 @@
+import hashlib
+import time
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.document_chunk import DocumentChunk
 from app.services.embedding import EmbeddingService
+
+_RAG_CACHE: dict[str, tuple[float, list[str]]] = {}
+_RAG_CACHE_TTL = 300  # 5 minutes
+
+
+def clear_rag_cache() -> None:
+    """清空 RAG 缓存（用于测试或文档更新后）"""
+    _RAG_CACHE.clear()
 
 
 class RetrievalService:
@@ -13,10 +24,17 @@ class RetrievalService:
     async def search(
         self, query: str, user_id: int, top_k: int = 5
     ) -> list[str]:
-        """1. 对 query 做 embedding
+        """1. 对 query 做 embedding（带缓存）
            2. 在 document_chunks 中做 L2 distance 检索
            3. 返回 top_k 相关片段
         """
+        cache_key = f"{user_id}:{hashlib.md5(query.encode()).hexdigest()}"
+        now = time.time()
+
+        cached = _RAG_CACHE.get(cache_key)
+        if cached and now - cached[0] < _RAG_CACHE_TTL:
+            return cached[1]
+
         # 1. 对查询文本做 embedding
         query_embedding = await self.embedding_service.embed([query])
         if not query_embedding:
@@ -36,7 +54,9 @@ class RetrievalService:
         chunks = result.scalars().all()
 
         # 3. 返回相关片段内容
-        return [chunk.content for chunk in chunks]
+        results = [chunk.content for chunk in chunks]
+        _RAG_CACHE[cache_key] = (now, results)
+        return results
 
     async def search_with_scores(
         self, query: str, user_id: int, top_k: int = 5, document_id: int | None = None
