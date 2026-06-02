@@ -283,14 +283,7 @@ severity: high=核心要求缺失, medium=重要但可弥补, low=加分项缺�
 
     async def extract_jd_keywords(self, jd_content: str, user_id: int) -> dict:
         """从 JD 中提取结构化关键词"""
-        system = """你是一位岗位分析专家，请从职位描述中提取关键要求。
-输出 JSON 格式：
-{
-  "keywords": [
-    {"term": "关键词", "category": "技术/软技能/经验/学历", "importance": "high/medium/low"}
-  ]
-}
-提取 10-20 个关键词，按重要度排序。"""
+        system = "从职位描述中提取 5-8 个最重要的关键词，按 JSON 输出：{\"keywords\": [{\"term\": \"词\", \"category\": \"技术/软技能/经验\", \"importance\": \"high/medium\"}]}"
 
         result = await self._chat_with_rag(
             system, f"请分析以下职位描述：\n{jd_content[:4000]}", user_id

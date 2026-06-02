@@ -36,17 +36,32 @@ class MatchingService:
         if not jd_points:
             return 68
 
-        # 对每个关键点在简历中检索
+        # 批量对所有关键点做 embedding（一次 API 调用替代 N 次）
+        # 然后逐个做 pgvector 检索
+        embeddings = await self.retrieval_service.embedding_service.embed(jd_points)
+
         total_similarity = 0
         match_count = 0
 
-        for point in jd_points:
-            results = await self.retrieval_service.search_with_scores(
-                point, user_id, top_k=3, document_id=resume_id
+        for i, point in enumerate(jd_points):
+            # 使用预计算的 embedding 直接检索
+            query_vector = embeddings[i] if i < len(embeddings) else None
+            if query_vector is None:
+                continue
+
+            from app.models.document_chunk import DocumentChunk
+            stmt = (
+                select(
+                    DocumentChunk,
+                    DocumentChunk.embedding.cosine_distance(query_vector).label("distance")
+                )
+                .where(DocumentChunk.user_id == user_id, DocumentChunk.document_id == resume_id)
+                .order_by("distance")
+                .limit(3)
             )
-            if results:
-                # 取最高相似度
-                max_similarity = max(score for _, score in results)
+            rows = self.db.execute(stmt).all()
+            if rows:
+                max_similarity = max(1 - distance for _, distance in rows)
                 total_similarity += max_similarity
                 match_count += 1
 

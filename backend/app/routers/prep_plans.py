@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -41,27 +43,35 @@ async def create_plan(payload: PrepPlanCreate, user: User = Depends(get_current_
         raise HTTPException(status_code=404, detail="JD 不存在")
 
     agent = AIAgent(retrieval)
+    resume_text = resume.content if resume else ""
+    jd_text = jd.content if jd else ""
 
-    try:
-        roadmap = await agent.build_roadmap(resume.content if resume else "", jd.content if jd else "", payload.target_role, user_id=user.id)
-    except Exception as exc:
-        logger.error("build_roadmap_failed", error=str(exc), exc_info=True)
-        roadmap = {
-            "summary": "AI 分析暂时不可用，请稍后重试",
-            "milestones": ["岗位匹配分析", "高频题训练", "STAR 表达打磨", "模拟面试复盘"],
-            "focusAreas": ["业务理解", "项目深挖", "结构化表达", "反问准备"],
-            "strengths": [],
-            "gaps": [],
-        }
-
-    # 从 JD 中提取关键词并存入 roadmap
-    if jd:
+    # 并行执行 build_roadmap 和 extract_jd_keywords，节省约 3-5 秒
+    async def _build_roadmap():
         try:
-            keywords_data = await agent.extract_jd_keywords(jd.content, user_id=user.id)
-            roadmap["keywords"] = keywords_data.get("keywords", [])
+            return await agent.build_roadmap(resume_text, jd_text, payload.target_role, user_id=user.id)
+        except Exception as exc:
+            logger.error("build_roadmap_failed", error=str(exc), exc_info=True)
+            return {
+                "summary": "AI 分析暂时不可用，请稍后重试",
+                "milestones": ["岗位匹配分析", "高频题训练", "STAR 表达打磨", "模拟面试复盘"],
+                "focusAreas": ["业务理解", "项目深挖", "结构化表达", "反问准备"],
+                "strengths": [],
+                "gaps": [],
+            }
+
+    async def _extract_keywords():
+        if not jd:
+            return []
+        try:
+            data = await agent.extract_jd_keywords(jd_text, user_id=user.id)
+            return data.get("keywords", [])
         except Exception as exc:
             logger.error("extract_jd_keywords_failed", error=str(exc), exc_info=True)
-            roadmap["keywords"] = []
+            return []
+
+    roadmap, keywords = await asyncio.gather(_build_roadmap(), _extract_keywords())
+    roadmap["keywords"] = keywords
 
     if resume and jd:
         try:
