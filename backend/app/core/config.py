@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     ai_base_url: str = "https://api.deepseek.com/v1"
     ai_api_key: str | None = None
     ai_model: str = "deepseek-v4-pro"
+    ai_fast_model: str | None = None  # 轻量任务模型（如关键词提取），为空时回退到 ai_model
 
     # Embedding 配置（独立于 chat，可使用不同服务商）
     embedding_base_url: str | None = None  # 为空时回退到 ai_base_url

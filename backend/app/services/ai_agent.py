@@ -180,6 +180,42 @@ class AIAgent:
                 "gaps": [],
             }
 
+    async def extract_jd_keywords(self, jd_content: str, user_id: int) -> dict:
+        """从 JD 中提取结构化关键词（使用更快的模型）"""
+        system = "从JD提取5-8个关键词，JSON：{\"keywords\":[{\"term\":\"词\",\"category\":\"技术/软技能/经验\",\"importance\":\"high/medium\"}]}"
+
+        result = await self._chat_fast(system, jd_content[:4000])
+
+        try:
+            return json.loads(self._strip_code_fences(result))
+        except json.JSONDecodeError:
+            return self._fallback_keywords(jd_content)
+
+    async def _chat_fast(self, system: str, user: str) -> str:
+        """使用更快的模型处理简单任务（如关键词提取）"""
+        fast_model = getattr(self.settings, 'ai_fast_model', None) or self.settings.ai_model
+        if not self.settings.ai_api_key:
+            return self._fallback(system, user)
+
+        payload = {
+            "model": fast_model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "temperature": 0.3,
+        }
+        headers = {"Authorization": f"Bearer {self.settings.ai_api_key}"}
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                f"{self.settings.ai_base_url.rstrip('/')}/chat/completions",
+                json=payload,
+                headers=headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
+
     async def generate_answer_cards(self, questions: list[dict], user_id: int) -> list[dict]:
         """为每道题并行生成 STAR 参考回答框架和关键词提示"""
         system = """你是面试教练，请为面试题生成参考回答框架。
@@ -272,19 +308,6 @@ matched=已覆盖，gaps=未覆盖。severity: high=核心缺失, medium=可弥�
                 "gaps": [],
                 "summary": "分析失败，请重试",
             }
-
-    async def extract_jd_keywords(self, jd_content: str, user_id: int) -> dict:
-        """从 JD 中提取结构化关键词"""
-        system = "从JD提取5-8个关键词，JSON：{\"keywords\":[{\"term\":\"词\",\"category\":\"技术/软技能/经验\",\"importance\":\"high/medium\"}]}"
-
-        result = await self._chat_with_rag(
-            system, jd_content[:4000], user_id
-        )
-
-        try:
-            return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
-            return self._fallback_keywords(jd_content)
 
     async def rewrite_resume(self, resume_text: str, jd_text: str, user_id: int) -> dict:
         """简历优化重写：根据 JD 优化简历内容，输出改写建议"""
