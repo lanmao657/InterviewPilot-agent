@@ -1,0 +1,22 @@
+services:
+  db:
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://interviewpilot:interviewpilot@db:5432/interviewpilot
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
