@@ -1,18 +1,23 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import bcrypt
 from jose import JWTError, jwt
+from pwdlib import PasswordHash
+from pwdlib.hashers.argon2 import Argon2Hasher
+from pwdlib.hashers.bcrypt import BcryptHasher
 
 from app.core.config import get_settings
 
+# 新密码使用 argon2，旧的 bcrypt 哈希仍可验证
+_password_hash = PasswordHash((Argon2Hasher(), BcryptHasher()))
+
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return _password_hash.hash(password)
 
 
 def verify_password(password: str, hashed_password: str) -> bool:
-    return bcrypt.checkpw(password.encode(), hashed_password.encode())
+    return _password_hash.verify(password, hashed_password)
 
 
 def create_token(subject: str, token_type: str, expires_delta: timedelta) -> str:
