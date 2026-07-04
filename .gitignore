@@ -11,6 +11,7 @@ test.db
 node_modules/
 dist/
 .vite/
+frontend/.playwright-cli/
 
 # Local env
 .env
