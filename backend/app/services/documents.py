@@ -1,14 +1,72 @@
+import base64
+import logging
 from io import BytesIO
 
 from docx import Document as DocxDocument
 from fastapi import UploadFile
+from openai import AsyncOpenAI
 from pptx import Presentation
 from pypdf import PdfReader
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.models import Document, DocumentChunk
 from app.services.embedding import EmbeddingService
+
+logger = logging.getLogger(__name__)
+
+# pypdf 提取结果低于此字符数时，判定为扫描件，走 OCR 回退
+_OCR_THRESHOLD = 50
+
+
+async def _ocr_pdf_with_vision(data: bytes) -> str:
+    """用 pymupdf 渲染 PDF 页面为图片，再调 OpenAI Vision API 提取文字"""
+    import pymupdf  # type: ignore[import-untyped]
+
+    settings = get_settings()
+    client = AsyncOpenAI(
+        base_url=settings.ai_base_url,
+        api_key=settings.ai_api_key or "",
+    )
+
+    doc = pymupdf.open(stream=data, filetype="pdf")
+    page_texts: list[str] = []
+
+    for page in doc:
+        # 渲染为 PNG（300 DPI 保证清晰度）
+        pix = page.get_pixmap(dpi=300)
+        img_bytes = pix.tobytes("png")
+        b64 = base64.b64encode(img_bytes).decode("utf-8")
+
+        resp = await client.chat.completions.create(
+            model=settings.ai_fast_model or settings.ai_model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "请提取这张图片中的所有文字内容，保持原始排版结构，"
+                                "直接输出文字，不要添加任何解释。"
+                            ),
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{b64}",
+                            },
+                        },
+                    ],
+                }
+            ],
+            max_tokens=4096,
+        )
+        page_texts.append(resp.choices[0].message.content or "")
+
+    doc.close()
+    return "\n".join(page_texts).strip()
 
 
 async def extract_upload_text(file: UploadFile) -> str:
@@ -18,7 +76,17 @@ async def extract_upload_text(file: UploadFile) -> str:
 
     if suffix == "pdf":
         reader = PdfReader(BytesIO(data))
-        return "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+        text = "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+
+        # pypdf 提取不到足够文字时，用 Vision API 做 OCR 回退
+        if len(text) < _OCR_THRESHOLD:
+            logger.info("pypdf 提取结果不足 %d 字符，尝试 OCR 回退", _OCR_THRESHOLD)
+            try:
+                text = await _ocr_pdf_with_vision(data)
+            except Exception:
+                logger.exception("OCR 回退失败")
+                # 如果 OCR 也失败，返回 pypdf 的原始结果（可能为空）
+        return text
     if suffix == "docx":
         doc = DocxDocument(BytesIO(data))
         return "\n".join(paragraph.text for paragraph in doc.paragraphs).strip()
