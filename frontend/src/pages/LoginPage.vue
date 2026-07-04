@@ -1,8 +1,8 @@
 <!-- frontend/src/pages/LoginPage.vue -->
 <script setup lang="ts">
 import { Loader2, UserX } from 'lucide-vue-next'
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,14 +11,16 @@ import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
-const isRegister = ref(false)
+const isRegister = ref(route.query.mode === 'register')
 const loading = ref(false)
 const guestLoading = ref(false)
 const error = ref('')
 const form = ref({ username: 'demo', password: 'password123' })
 const usernameRequirements = '3-120 个字符，不能含 @'
 const passwordRequirements = '至少 8 位'
+const isGuestConversion = computed(() => isRegister.value && route.query.guest === '1' && auth.isGuest)
 
 function validateRegistrationForm() {
   const username = form.value.username.trim()
@@ -47,8 +49,12 @@ async function submit() {
   }
   loading.value = true
   try {
-    const session = isRegister.value ? await api.register(form.value) : await api.login(form.value)
-    auth.setSession(session)
+    const session = isGuestConversion.value
+      ? await api.convertGuest(form.value)
+      : isRegister.value
+        ? await api.register(form.value)
+        : await api.login(form.value)
+    auth.setSession(session, session.user.is_anonymous)
     router.push('/dashboard')
   } catch (err) {
     error.value = err instanceof Error ? err.message : '登录失败'
@@ -120,7 +126,7 @@ async function guestLogin() {
         <div class="mt-2 flex gap-3">
           <Button type="submit" :disabled="loading" class="flex-1">
             <Loader2 v-if="loading" class="size-4 animate-spin" />
-            {{ isRegister ? '注册并进入' : '登录' }}
+            {{ isGuestConversion ? '注册并保存游客数据' : isRegister ? '注册并进入' : '登录' }}
           </Button>
           <Button type="button" variant="secondary" :disabled="guestLoading" class="flex-1" @click="guestLogin">
             <UserX v-if="!guestLoading" class="size-4" />

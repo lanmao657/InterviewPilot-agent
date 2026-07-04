@@ -3,13 +3,16 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AppShell from './AppShell.vue'
+import { useAuthStore } from '@/stores/auth'
+
+const routerPush = vi.hoisted(() => vi.fn())
 
 vi.mock('vue-router', async () => {
   const actual = await vi.importActual<typeof import('vue-router')>('vue-router')
   return {
     ...actual,
     useRoute: () => ({ path: '/dashboard' }),
-    useRouter: () => ({ push: vi.fn() }),
+    useRouter: () => ({ push: routerPush }),
   }
 })
 
@@ -30,6 +33,7 @@ Object.defineProperty(window, 'matchMedia', {
 describe('AppShell', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    routerPush.mockReset()
   })
 
   it('renders Chinese sidebar navigation', () => {
@@ -49,5 +53,33 @@ describe('AppShell', () => {
     expect(wrapper.text()).toContain('AI 助手')
     expect(wrapper.text()).toContain('报告')
     expect(wrapper.text()).toContain('设置')
+  })
+
+  it('routes guest registration entry points to guest conversion registration', async () => {
+    const auth = useAuthStore()
+    auth.setSession({
+      access_token: 'guest-token',
+      refresh_token: 'guest-refresh',
+      token_type: 'bearer',
+      user: { id: 1, username: 'guest_abc', name: '游客 abc', email: null, is_anonymous: true },
+    }, true)
+
+    const wrapper = mount(AppShell, {
+      global: {
+        stubs: {
+          RouterLink: RouterLinkStub,
+          RouterView: true,
+          GlobalAssistantWidget: true,
+          ToastContainer: true,
+        },
+      },
+    })
+
+    await wrapper.findAll('button').find((button) => button.text().includes('注册正式账号'))!.trigger('click')
+    expect(routerPush).toHaveBeenLastCalledWith('/login?mode=register&guest=1')
+
+    await wrapper.findAll('button').find((button) => button.text().includes('退出登录'))!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text().includes('注册正式账号'))!.trigger('click')
+    expect(routerPush).toHaveBeenLastCalledWith('/login?mode=register&guest=1')
   })
 })

@@ -50,9 +50,10 @@ class AIAgent:
         """带 RAG 上下文的聊天"""
         context = ""
         if self.retrieval_service:
-            relevant_chunks = await self.retrieval_service.search(
-                user, user_id, top_k=3
-            )
+            try:
+                relevant_chunks = await self.retrieval_service.search(user, user_id, top_k=3)
+            except Exception:
+                relevant_chunks = []
             if relevant_chunks:
                 context = "\n---\n".join(relevant_chunks)
 

@@ -85,6 +85,10 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class GuestConvertRequest(UserCreate):
+    pass
+
+
 class DocumentRead(BaseModel):
     id: int
     kind: DocumentKind

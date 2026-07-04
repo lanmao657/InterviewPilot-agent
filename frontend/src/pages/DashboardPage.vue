@@ -167,7 +167,7 @@ const stats = computed(() => [
             <p class="text-sm font-semibold text-[var(--primary)]">注册正式账号，永久保存数据</p>
           </div>
           <p class="text-xs text-[var(--text-muted)] mb-3">游客数据将在 24 小时后清除，注册后可永久保存简历、面试记录和复盘报告。</p>
-          <Button size="sm" class="w-full" @click="router.push('/login')">
+          <Button size="sm" class="w-full" @click="router.push('/login?mode=register&guest=1')">
             立即注册
           </Button>
         </div>

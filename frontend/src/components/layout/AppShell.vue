@@ -61,6 +61,11 @@ function cancelGuestLogout() {
   showGuestLogoutConfirm.value = false
 }
 
+function goToGuestRegistration() {
+  showGuestLogoutConfirm.value = false
+  router.push('/login?mode=register&guest=1')
+}
+
 function closeSidebar() {
   sidebarOpen.value = false
 }
@@ -145,7 +150,7 @@ function closeSidebar() {
         >
           <AlertTriangle class="size-4 text-[var(--warning)]" />
           <span class="text-[var(--text-secondary)]">当前为游客模式，数据仅在本次会话中保存</span>
-          <Button variant="ghost" size="sm" @click="router.push('/login')">
+          <Button variant="ghost" size="sm" @click="goToGuestRegistration">
             注册正式账号
           </Button>
         </div>
@@ -230,7 +235,7 @@ function closeSidebar() {
             你上传的简历、面试记录和复盘报告将会丢失。建议注册正式账号保存数据。
           </p>
           <div class="flex gap-3">
-            <Button class="flex-1" @click="router.push('/login'); showGuestLogoutConfirm = false">
+            <Button class="flex-1" @click="goToGuestRegistration">
               注册正式账号
             </Button>
             <Button variant="secondary" class="flex-1" @click="confirmGuestLogout">

@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.core.security import create_token, decode_token, hash_password, verify_password
 from app.deps import get_current_user
 from app.models import User
-from app.schemas import RefreshRequest, TokenPair, UserCreate, UserLogin, UserRead
+from app.schemas import GuestConvertRequest, RefreshRequest, TokenPair, UserCreate, UserLogin, UserRead
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -76,6 +76,34 @@ def guest_login(db: Session = Depends(get_db)) -> TokenPair:
         hashed_password=hash_password(uuid.uuid4().hex),
         is_anonymous=True,
     )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return _token_pair(user)
+
+
+@router.post("/convert-guest", response_model=TokenPair)
+def convert_guest(
+    payload: GuestConvertRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TokenPair:
+    if not user.is_anonymous:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="当前账号不是游客账号")
+
+    existing_username = db.scalar(select(User).where(User.username == payload.username, User.id != user.id))
+    if existing_username:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户名已注册")
+
+    email = payload.email.lower() if payload.email else None
+    if email and db.scalar(select(User).where(User.email == email, User.id != user.id)):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="邮箱已注册")
+
+    user.username = payload.username
+    user.email = email
+    user.name = payload.username
+    user.hashed_password = hash_password(payload.password)
+    user.is_anonymous = False
     db.add(user)
     db.commit()
     db.refresh(user)
