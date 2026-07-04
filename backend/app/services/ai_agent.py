@@ -36,7 +36,7 @@ class AIAgent:
             "temperature": 0.4,
         }
         headers = {"Authorization": f"Bearer {self.settings.ai_api_key}"}
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(
                 f"{self.settings.ai_base_url.rstrip('/')}/chat/completions",
                 json=payload,
@@ -97,18 +97,37 @@ class AIAgent:
                     if delta:
                         yield delta
 
+    @staticmethod
+    def _normalize_rubric(rubric: object) -> dict:
+        """将 LLM 返回的 rubric 统一转为 dict 格式"""
+        if isinstance(rubric, dict):
+            return rubric
+        if isinstance(rubric, str):
+            # 从文本中提取评分维度，如"优秀回答：...中等回答：..."
+            return {"评分标准": rubric}
+        return {"clarity": 25, "structure": 25, "evidence": 25, "reflection": 25}
+
     async def generate_questions(
         self, focus: str, count: int, user_id: int
     ) -> list[dict]:
         """生成面试题（基于 RAG）"""
         system = f"""你是面试题设计专家。根据候选人的简历和 JD，生成 {count} 道面试题。
-每道题包含：category, difficulty(easy/medium/hard), prompt, rubric(评分标准)。
+每道题包含以下字段：
+- category: 题目分类（字符串）
+- difficulty: 难度，取值 easy / medium / hard
+- prompt: 题目内容（字符串）
+- rubric: 评分标准（JSON 对象，key 为评分维度名称，value 为该维度的评分标准描述字符串）
+
 输出 JSON 数组。"""
 
         result = await self._chat_with_rag(system, f"训练重点：{focus}", user_id)
 
         try:
-            return json.loads(self._strip_code_fences(result))
+            questions = json.loads(self._strip_code_fences(result))
+            for q in questions:
+                if isinstance(q, dict):
+                    q["rubric"] = self._normalize_rubric(q.get("rubric"))
+            return questions
         except json.JSONDecodeError:
             # 降级到固定模板
             return self._fallback_questions(focus, count)
