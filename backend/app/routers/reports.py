@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.deps import get_current_user, get_retrieval_service
 from app.models import InterviewSession, Report, User
 from app.schemas import ReportRead
-from app.services.ai_agent import AIAgent
+from app.services.ai_agent import AI_NOTICE_KEY, AIAgent
 from app.services.retrieval import RetrievalService
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -22,6 +22,8 @@ def _format_report_content(report_data: str | dict) -> str:
         return str(report_data)
 
     parts: list[str] = []
+    if notice := report_data.get(AI_NOTICE_KEY):
+        parts.append(f"【AI 提示】\n{notice}")
     if overall := report_data.get("overall"):
         parts.append(f"【整体评价】\n{overall}")
     if avg := report_data.get("average_scores"):

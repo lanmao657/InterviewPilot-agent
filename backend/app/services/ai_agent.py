@@ -10,6 +10,12 @@ from app.core.config import get_settings
 from app.services.retrieval import RetrievalService
 
 
+AI_NOTICE_KEY = "_ai_notice"
+AI_LOCAL_NOTICE = "未配置 AI 服务，当前使用本地模拟结果。"
+AI_UNAVAILABLE_NOTICE = "AI 服务暂时不可用，已使用本地示例结果。"
+AI_FORMAT_NOTICE = "AI 返回格式异常，已使用本地示例结果。"
+
+
 class AIAgent:
     def __init__(self, retrieval_service: Optional[RetrievalService] = None):
         self.settings = get_settings()
@@ -113,21 +119,21 @@ class AIAgent:
         if isinstance(payload, dict):
             payload = payload.get("questions")
         if not isinstance(payload, list):
-            return self._fallback_questions(focus, count)
+            return self._fallback_questions(focus, count, AI_FORMAT_NOTICE)
 
         questions: list[dict] = []
         for item in payload:
             if not isinstance(item, dict):
-                return self._fallback_questions(focus, count)
+                return self._fallback_questions(focus, count, AI_FORMAT_NOTICE)
             category = item.get("category")
             difficulty = item.get("difficulty")
             prompt = item.get("prompt")
             if not isinstance(category, str) or not category.strip():
-                return self._fallback_questions(focus, count)
+                return self._fallback_questions(focus, count, AI_FORMAT_NOTICE)
             if difficulty not in {"easy", "medium", "hard"}:
-                return self._fallback_questions(focus, count)
+                return self._fallback_questions(focus, count, AI_FORMAT_NOTICE)
             if not isinstance(prompt, str) or not prompt.strip():
-                return self._fallback_questions(focus, count)
+                return self._fallback_questions(focus, count, AI_FORMAT_NOTICE)
             questions.append(
                 {
                     "category": category.strip(),
@@ -136,7 +142,28 @@ class AIAgent:
                     "rubric": self._normalize_rubric(item.get("rubric")),
                 }
             )
-        return questions or self._fallback_questions(focus, count)
+        return questions or self._fallback_questions(focus, count, AI_FORMAT_NOTICE)
+
+    def _fallback_notice(self, exc: Exception | None = None) -> str:
+        if not self.settings.ai_api_key:
+            return AI_LOCAL_NOTICE
+        if isinstance(exc, (json.JSONDecodeError, TypeError, KeyError, ValueError)):
+            return AI_FORMAT_NOTICE
+        return AI_UNAVAILABLE_NOTICE
+
+    @staticmethod
+    def _mark_notice(payload: dict, notice: str | None) -> dict:
+        if notice:
+            payload[AI_NOTICE_KEY] = notice
+        return payload
+
+    @staticmethod
+    def _valid_score_payload(payload: object) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        score = payload.get("score")
+        dimensions = payload.get("dimensions")
+        return isinstance(score, int) and 0 <= score <= 100 and isinstance(dimensions, dict)
 
     async def generate_questions(
         self, focus: str, count: int, user_id: int
@@ -151,14 +178,16 @@ class AIAgent:
 
 输出 JSON 数组。"""
 
-        result = await self._chat_with_rag(system, f"训练重点：{focus}", user_id)
+        try:
+            result = await self._chat_with_rag(system, f"训练重点：{focus}", user_id)
+        except Exception as exc:
+            return self._fallback_questions(focus, count, self._fallback_notice(exc))
 
         try:
             questions = json.loads(self._strip_code_fences(result))
             return self._normalize_questions_payload(questions, focus, count)
-        except json.JSONDecodeError:
-            # 降级到固定模板
-            return self._fallback_questions(focus, count)
+        except json.JSONDecodeError as exc:
+            return self._fallback_questions(focus, count, self._fallback_notice(exc))
 
     async def score_answer(self, question: str, answer: str, user_id: int) -> dict:
         """评分回答（基于 RAG）"""
@@ -171,14 +200,20 @@ class AIAgent:
 严格按 JSON 格式输出：
 {"score": 总分, "dimensions": {"clarity": 分, "structure": 分, "evidence": 分, "reflection": 分}, "summary": "一句话总结", "strengths": ["优点1"], "improvements": ["改进1"], "follow_up": "追问"}"""
 
-        result = await self._chat_with_rag(
-            system, f"题目：{question}\n回答：{answer}", user_id
-        )
+        try:
+            result = await self._chat_with_rag(
+                system, f"题目：{question}\n回答：{answer}", user_id
+            )
+        except Exception as exc:
+            return self._fallback_score(self._fallback_notice(exc))
 
         try:
-            return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
-            return self._fallback_score()
+            payload = json.loads(self._strip_code_fences(result))
+            if not self._valid_score_payload(payload):
+                raise ValueError("invalid score payload")
+            return payload
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            return self._fallback_score(self._fallback_notice(exc))
 
     async def build_report(self, title: str, turns: list[dict], user_id: int) -> dict:
         """构建报告（基于 RAG）"""
@@ -195,14 +230,17 @@ class AIAgent:
 
 输出 JSON 格式。"""
 
-        result = await self._chat_with_rag(
-            system, f"{title}\n{joined[:6000]}", user_id
-        )
+        try:
+            result = await self._chat_with_rag(
+                system, f"{title}\n{joined[:6000]}", user_id
+            )
+        except Exception as exc:
+            return self._fallback_report(title, turns, self._fallback_notice(exc))
 
         try:
             return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
-            return self._fallback_report(title, turns)
+        except json.JSONDecodeError as exc:
+            return self._fallback_report(title, turns, self._fallback_notice(exc))
 
     async def build_roadmap(
         self, resume_text: str, jd_text: str, target_role: str, user_id: int
@@ -297,10 +335,13 @@ star_hint 用一句话说明 S→T→A→R 每步怎么讲。"""
         ]
 
     async def coach_with_context(self, message: str, context: dict) -> str:
-        return await self._chat(
-            self.assistant_system_prompt(),
-            self.assistant_user_prompt(message, context),
-        )
+        try:
+            return await self._chat(
+                self.assistant_system_prompt(),
+                self.assistant_user_prompt(message, context),
+            )
+        except Exception:
+            return "助手暂时无法回答，请稍后重试。"
 
     async def stream_coach_with_context(
         self, message: str, context: dict
@@ -436,7 +477,7 @@ missing_keywords 列出 JD 中有但简历缺失的关键词。"""
             "下一步建议：补齐岗位信息、生成 6 道高频题、完成一轮文字模拟面试，并用复盘报告修正表达。"
         )
 
-    def _fallback_questions(self, focus: str, count: int) -> list[dict]:
+    def _fallback_questions(self, focus: str, count: int, notice: str | None = None) -> list[dict]:
         prompts = [
             f"请结合 {focus} 讲一个最能体现你解决复杂问题的项目。",
             "如果面试官质疑你的项目影响力，你会如何用数据回应？",
@@ -450,13 +491,16 @@ missing_keywords 列出 JD 中有但简历缺失的关键词。"""
                 "category": focus,
                 "difficulty": "medium" if i % 3 else "hard",
                 "prompt": prompts[i % len(prompts)],
-                "rubric": {"clarity": 25, "structure": 25, "evidence": 25, "reflection": 25},
+                "rubric": self._mark_notice(
+                    {"clarity": 25, "structure": 25, "evidence": 25, "reflection": 25},
+                    notice,
+                ),
             }
             for i in range(count)
         ]
 
-    def _fallback_score(self) -> dict:
-        return {
+    def _fallback_score(self, notice: str | None = None) -> dict:
+        return self._mark_notice({
             "score": 70,
             "dimensions": {
                 "clarity": 70,
@@ -468,10 +512,10 @@ missing_keywords 列出 JD 中有但简历缺失的关键词。"""
             "strengths": ["回答完整"],
             "improvements": ["可以更具体", "需要量化"],
             "follow_up": "能否补充一个具体指标？",
-        }
+        }, notice)
 
-    def _fallback_report(self, title: str, turns: list[dict]) -> dict:
-        return {
+    def _fallback_report(self, title: str, turns: list[dict], notice: str | None = None) -> dict:
+        return self._mark_notice({
             "title": title,
             "overall": "整体表现良好，建议加强结构化表达。",
             "average_scores": {
@@ -482,4 +526,4 @@ missing_keywords 列出 JD 中有但简历缺失的关键词。"""
             },
             "improvements": ["使用 STAR 结构", "补充量化数据", "加强复盘深度"],
             "next_steps": ["练习高频题", "准备项目案例", "模拟面试"],
-        }
+        }, notice)

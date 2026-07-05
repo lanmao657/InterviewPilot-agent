@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from app.services.ai_agent import AIAgent
 
 
@@ -72,3 +72,17 @@ async def test_score_answer_falls_back_when_retrieval_fails():
 
     assert result["score"] == 70
     assert result["summary"]
+
+
+@pytest.mark.asyncio
+async def test_report_marks_local_fallback_when_ai_key_missing():
+    agent = AIAgent()
+    agent.settings.ai_api_key = None
+
+    result = await agent.build_report(
+        "模拟面试",
+        [{"question": "问题", "answer": "回答", "score": 70}],
+        user_id=1,
+    )
+
+    assert result["_ai_notice"] == "未配置 AI 服务，当前使用本地模拟结果。"

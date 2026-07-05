@@ -20,6 +20,7 @@ const answer = ref('')
 const followUp = ref('')
 const streaming = ref(false)
 const showQuestionBank = ref(true)
+const aiMessage = ref('')
 
 // 面试模式：practice（练习）/ real（真实）
 type InterviewMode = 'practice' | 'real'
@@ -40,6 +41,10 @@ const totalTimeUsed = ref(0) // 面试总用时（秒）
 let interviewStartTime = 0
 
 const latestTurn = computed(() => interview.value?.turns.at(-1))
+const latestAiNotice = computed(() => {
+  const notice = latestTurn.value?.feedback?._ai_notice
+  return typeof notice === 'string' ? notice : ''
+})
 const score = computed(() => interview.value?.current_score ?? 0)
 const answeredCount = computed(() => interview.value?.turns.length ?? 0)
 const totalQuestions = computed(() => questionsQuery.data.value?.length ?? 0)
@@ -94,6 +99,7 @@ const createMutation = useMutation({
 const answerMutation = useMutation({
   mutationFn: () => {
     if (!interview.value) throw new Error('请先开始面试')
+    aiMessage.value = ''
     return api.answer(interview.value.id, { question: selectedQuestion.value, answer: answer.value })
   },
   onSuccess: async (data) => {
@@ -103,6 +109,9 @@ const answerMutation = useMutation({
     await streamFollowUp()
     // 自动启动下一题计时
     startTimer()
+  },
+  onError: (err: Error) => {
+    aiMessage.value = err.message || 'AI 评分暂时不可用，请稍后重试'
   },
 })
 
@@ -116,6 +125,9 @@ const reportMutation = useMutation({
     return api.createReport(interview.value.id)
   },
   onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reports'] }),
+  onError: (err: Error) => {
+    aiMessage.value = err.message || '报告生成失败，请稍后重试'
+  },
 })
 
 function selectQuestion(question: Question) {
@@ -235,6 +247,13 @@ onBeforeUnmount(() => stopTimer())
       <Progress v-if="totalQuestions > 0" :value="(answeredCount / totalQuestions) * 100" class="mb-5" />
 
       <div class="flex flex-col gap-5">
+        <p
+          v-if="aiMessage || latestAiNotice"
+          class="rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10 px-3 py-2 text-sm text-[var(--warning)]"
+        >
+          {{ aiMessage || latestAiNotice }}
+        </p>
+
         <!-- 面试官问题 -->
         <div class="glass-elevated rounded-xl p-5">
           <div class="mb-2 flex items-center gap-2 text-sm font-semibold">

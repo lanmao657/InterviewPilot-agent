@@ -30,8 +30,9 @@ const generateMutation = useMutation({
       focus: focus.value,
     })
   },
-  onSuccess: () => {
-    message.value = '题目已生成'
+  onSuccess: (data) => {
+    const notice = data.find((question) => typeof question.rubric?._ai_notice === 'string')?.rubric._ai_notice
+    message.value = typeof notice === 'string' ? notice : '题目已生成'
     queryClient.invalidateQueries({ queryKey: ['questions'] })
   },
   onError: (err: Error) => {

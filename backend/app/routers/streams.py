@@ -82,7 +82,7 @@ async def _sse_assistant_persisted(
         fallback = "助手暂时无法回答，请稍后重试。"
         content = content or fallback
         finish_message(db, conversation, assistant_message, content, "error")
-        yield f"event: error\ndata: {str(exc)}\n\n"
+        yield f"event: error\ndata: {fallback}\n\n"
         yield "event: done\ndata: [DONE]\n\n"
 
 

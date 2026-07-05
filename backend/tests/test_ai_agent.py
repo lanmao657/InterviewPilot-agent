@@ -43,3 +43,44 @@ def test_generate_questions_falls_back_for_incomplete_json_items() -> None:
         assert all(question["rubric"] for question in questions)
 
     asyncio.run(_run())
+
+
+def test_generate_questions_marks_ai_fallback_when_provider_fails() -> None:
+    async def _run() -> None:
+        agent = AIAgent()
+        agent.settings.ai_api_key = "test-key"
+        agent._chat_with_rag = AsyncMock(side_effect=RuntimeError("provider down"))
+
+        questions = await agent.generate_questions("项目深挖", 2, user_id=1)
+
+        assert len(questions) == 2
+        assert questions[0]["rubric"]["_ai_notice"] == "AI 服务暂时不可用，已使用本地示例结果。"
+
+    asyncio.run(_run())
+
+
+def test_score_answer_marks_ai_fallback_for_invalid_model_output() -> None:
+    async def _run() -> None:
+        agent = AIAgent()
+        agent.settings.ai_api_key = "test-key"
+        agent._chat_with_rag = AsyncMock(return_value='{"score": "not a number"}')
+
+        result = await agent.score_answer("测试问题", "测试回答", user_id=1)
+
+        assert result["score"] == 70
+        assert result["_ai_notice"] == "AI 返回格式异常，已使用本地示例结果。"
+
+    asyncio.run(_run())
+
+
+def test_coach_with_context_returns_safe_message_when_provider_fails() -> None:
+    async def _run() -> None:
+        agent = AIAgent()
+        agent.settings.ai_api_key = "test-key"
+        agent._chat = AsyncMock(side_effect=RuntimeError("provider down"))
+
+        answer = await agent.coach_with_context("我该怎么准备？", {})
+
+        assert answer == "助手暂时无法回答，请稍后重试。"
+
+    asyncio.run(_run())
