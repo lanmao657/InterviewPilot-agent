@@ -142,4 +142,50 @@ describe('DocumentsPage embedding status', () => {
     expect(wrapper.text()).toContain('文档语义索引仍在建立中，请稍后再试')
     expect(mocks.createPlanStream).not.toHaveBeenCalled()
   })
+
+  it('shows AI fallback notice from streamed plan generation', async () => {
+    mocks.documents.mockResolvedValue([
+      {
+        id: 1,
+        kind: 'resume',
+        filename: 'resume.txt',
+        summary: { preview: 'resume' },
+        analysis: null,
+        embedding_status: 'ready',
+        embedding_error: null,
+        chunk_count: 2,
+        created_at: '2026-07-05T00:00:00Z',
+      },
+      {
+        id: 2,
+        kind: 'job_description',
+        filename: 'jd.txt',
+        summary: { preview: 'jd' },
+        analysis: null,
+        embedding_status: 'ready',
+        embedding_error: null,
+        chunk_count: 1,
+        created_at: '2026-07-05T00:00:00Z',
+      },
+    ])
+    mocks.createPlanStream.mockImplementation(async (_payload, onEvent) => {
+      onEvent('notice', { source: 'roadmap', message: 'AI 服务暂时不可用，已使用本地示例结果。' })
+      return {
+        id: 7,
+        title: '高级前端工程师 面试准备计划',
+        target_role: '高级前端工程师',
+        fit_score: 68,
+        status: 'active',
+        roadmap: {},
+        created_at: '2026-07-05T00:00:00Z',
+      }
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text().includes('生成准备计划'))!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('AI 服务暂时不可用，已使用本地示例结果。')
+  })
 })

@@ -80,6 +80,15 @@ const shareData = computed(() => {
   }
 })
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 // 导出 PDF（使用浏览器打印功能）
 function exportPDF() {
   const reports = reportsQuery.data.value
@@ -95,8 +104,10 @@ function exportPDF() {
   const scoreRows = Object.entries(dimLabels)
     .map(([key, label]) => `<tr><td>${label}</td><td style="text-align:right;font-weight:bold">${scores[key] ?? 0} 分</td></tr>`)
     .join('')
+  const safeTitle = escapeHtml(latest.title)
+  const safeContent = escapeHtml(latest.content)
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${latest.title}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${safeTitle}</title>
 <style>
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:40px;color:#1a1a1a;max-width:700px;margin:0 auto}
 h1{font-size:20px;border-bottom:2px solid #3b82f6;padding-bottom:8px}
@@ -107,10 +118,10 @@ th{background:#f3f4f6;font-weight:600}
 .content{white-space:pre-line;line-height:1.8;margin-top:16px}
 .footer{margin-top:40px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280}
 </style></head><body>
-<h1>${latest.title}</h1>
+<h1>${safeTitle}</h1>
 <p>综合得分：<span class="score">${latest.overall_score} 分</span></p>
 <table><thead><tr><th>维度</th><th>分数</th></tr></thead><tbody>${scoreRows}</tbody></table>
-<div class="content">${latest.content}</div>
+<div class="content">${safeContent}</div>
 <div class="footer">来自 InterviewPilot — AI 面试准备平台 · ${new Date().toLocaleDateString('zh-CN')}</div>
 </body></html>`
   const win = window.open('', '_blank')

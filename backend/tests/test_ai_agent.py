@@ -84,3 +84,35 @@ def test_coach_with_context_returns_safe_message_when_provider_fails() -> None:
         assert answer == "助手暂时无法回答，请稍后重试。"
 
     asyncio.run(_run())
+
+
+def test_document_ai_features_mark_fallback_when_provider_fails() -> None:
+    async def _run() -> None:
+        agent = AIAgent()
+        agent.settings.ai_api_key = "test-key"
+        agent._chat_with_rag = AsyncMock(side_effect=RuntimeError("provider down"))
+
+        analysis = await agent.analyze_resume("简历内容", user_id=1)
+        jd_match = await agent.analyze_jd_match("简历内容", "JD 内容", user_id=1)
+        rewrite = await agent.rewrite_resume("简历内容", "JD 内容", user_id=1)
+        roadmap = await agent.build_roadmap("简历内容", "JD 内容", "工程师", user_id=1)
+
+        assert analysis["_ai_notice"] == "AI 服务暂时不可用，已使用本地示例结果。"
+        assert jd_match["_ai_notice"] == "AI 服务暂时不可用，已使用本地示例结果。"
+        assert rewrite["_ai_notice"] == "AI 服务暂时不可用，已使用本地示例结果。"
+        assert roadmap["_ai_notice"] == "AI 服务暂时不可用，已使用本地示例结果。"
+
+    asyncio.run(_run())
+
+
+def test_keyword_extraction_marks_local_fallback_without_ai_key() -> None:
+    async def _run() -> None:
+        agent = AIAgent()
+        agent.settings.ai_api_key = None
+
+        result = await agent.extract_jd_keywords("负责 Python FastAPI PostgreSQL 数据分析", user_id=1)
+
+        assert result["_ai_notice"] == "未配置 AI 服务，当前使用本地模拟结果。"
+        assert result["keywords"]
+
+    asyncio.run(_run())

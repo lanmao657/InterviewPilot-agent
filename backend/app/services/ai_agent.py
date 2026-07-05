@@ -251,30 +251,36 @@ class AIAgent:
 {"summary":"一句话匹配总结","milestones":["阶段1","阶段2","阶段3","阶段4"],"focusAreas":["重点1","重点2","重点3","重点4"],"strengths":["优势1","优势2"],"gaps":["差距1","差距2"]}
 要求：milestones按时间排序且可执行，focusAreas针对核心能力，strengths/gaps基于实际对比。"""
 
-        result = await self._chat_with_rag(system, prompt, user_id)
+        try:
+            result = await self._chat_with_rag(system, prompt, user_id)
+        except Exception as exc:
+            return self._fallback_roadmap(self._fallback_notice(exc))
 
         try:
             return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
             # 降级：尝试提取部分内容
-            return {
+            return self._mark_notice({
                 "summary": result[:900] if result else "建议先完善简历和 JD 信息",
                 "milestones": ["岗位匹配分析", "高频题训练", "STAR 表达打磨", "模拟面试复盘"],
                 "focusAreas": ["业务理解", "项目深挖", "结构化表达", "反问准备"],
                 "strengths": [],
                 "gaps": [],
-            }
+            }, self._fallback_notice(exc))
 
     async def extract_jd_keywords(self, jd_content: str, user_id: int) -> dict:
         """从 JD 中提取结构化关键词（使用更快的模型）"""
         system = "从JD提取5-8个关键词，JSON：{\"keywords\":[{\"term\":\"词\",\"category\":\"技术/软技能/经验\",\"importance\":\"high/medium\"}]}"
 
-        result = await self._chat_fast(system, jd_content[:4000])
+        try:
+            result = await self._chat_fast(system, jd_content[:4000])
+        except Exception as exc:
+            return self._fallback_keywords(jd_content, self._fallback_notice(exc))
 
         try:
             return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
-            return self._fallback_keywords(jd_content)
+        except json.JSONDecodeError as exc:
+            return self._fallback_keywords(jd_content, self._fallback_notice(exc))
 
     async def _chat_fast(self, system: str, user: str) -> str:
         """使用更快的模型处理简单任务（如关键词提取）"""
@@ -367,14 +373,17 @@ star_hint 用一句话说明 S→T→A→R 每步怎么讲。"""
 模块至少包含：教育背景、工作经历、项目经验、技能清单。
 评分标准：量化数据、STAR 结构、关键词覆盖、排版清晰度。"""
 
-        result = await self._chat_with_rag(
-            system, content[:6000], user_id
-        )
+        try:
+            result = await self._chat_with_rag(
+                system, content[:6000], user_id
+            )
+        except Exception as exc:
+            return self._fallback_analysis(self._fallback_notice(exc))
 
         try:
             return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
-            return self._fallback_analysis()
+        except json.JSONDecodeError as exc:
+            return self._fallback_analysis(self._fallback_notice(exc))
 
     async def analyze_jd_match(self, resume_text: str, jd_text: str, user_id: int) -> dict:
         """JD 匹配差距分析：对比简历与 JD 要求，标出覆盖项和缺失项"""
@@ -382,20 +391,19 @@ star_hint 用一句话说明 S→T→A→R 每步怎么讲。"""
 {"matched":[{"requirement":"JD要求","evidence":"简历证据"}],"gaps":[{"requirement":"JD要求","severity":"high/medium/low","suggestion":"弥补建议"}],"summary":"一句话总结"}
 matched=已覆盖，gaps=未覆盖。severity: high=核心缺失, medium=可弥补, low=加分项。"""
 
-        result = await self._chat_with_rag(
-            system,
-            f"简历：\n{resume_text[:3000]}\n\nJD：\n{jd_text[:3000]}",
-            user_id,
-        )
+        try:
+            result = await self._chat_with_rag(
+                system,
+                f"简历：\n{resume_text[:3000]}\n\nJD：\n{jd_text[:3000]}",
+                user_id,
+            )
+        except Exception as exc:
+            return self._fallback_jd_match(self._fallback_notice(exc))
 
         try:
             return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
-            return {
-                "matched": [],
-                "gaps": [],
-                "summary": "分析失败，请重试",
-            }
+        except json.JSONDecodeError as exc:
+            return self._fallback_jd_match(self._fallback_notice(exc))
 
     async def rewrite_resume(self, resume_text: str, jd_text: str, user_id: int) -> dict:
         """简历优化重写：根据 JD 优化简历内容，输出改写建议"""
@@ -416,25 +424,23 @@ matched=已覆盖，gaps=未覆盖。severity: high=核心缺失, medium=可弥�
 rewrites 至少给出 3 处具体修改建议，要贴近原始内容。
 missing_keywords 列出 JD 中有但简历缺失的关键词。"""
 
-        result = await self._chat_with_rag(
-            system,
-            f"简历：\n{resume_text[:3000]}\n\nJD：\n{jd_text[:3000]}",
-            user_id,
-        )
+        try:
+            result = await self._chat_with_rag(
+                system,
+                f"简历：\n{resume_text[:3000]}\n\nJD：\n{jd_text[:3000]}",
+                user_id,
+            )
+        except Exception as exc:
+            return self._fallback_rewrite(self._fallback_notice(exc))
 
         try:
             return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
-            return {
-                "overall_suggestion": "请重试",
-                "rewrites": [],
-                "missing_keywords": [],
-                "ats_score_estimate": 0,
-            }
+        except json.JSONDecodeError as exc:
+            return self._fallback_rewrite(self._fallback_notice(exc))
 
-    def _fallback_analysis(self) -> dict:
+    def _fallback_analysis(self, notice: str | None = None) -> dict:
         """简历诊断降级方案"""
-        return {
+        return self._mark_notice({
             "overall_score": 65,
             "modules": [
                 {"name": "教育背景", "score": 70, "comment": "信息完整"},
@@ -444,9 +450,9 @@ missing_keywords 列出 JD 中有但简历缺失的关键词。"""
             ],
             "issues": ["建议补充更多量化成果", "项目描述缺少 STAR 结构"],
             "suggestions": ["用数据量化工作成果", "按 STAR 结构重写项目经历"],
-        }
+        }, notice)
 
-    def _fallback_keywords(self, jd_content: str) -> dict:
+    def _fallback_keywords(self, jd_content: str, notice: str | None = None) -> dict:
         """关键词提取降级方案：简单分词"""
         import re
         words = re.findall(r'[一-鿿]{2,}|[A-Za-z][A-Za-z+#.]{2,}', jd_content)
@@ -458,7 +464,31 @@ missing_keywords 列出 JD 中有但简历缺失的关键词。"""
                 keywords.append({"term": word, "category": "技术", "importance": "medium"})
             if len(keywords) >= 15:
                 break
-        return {"keywords": keywords}
+        return self._mark_notice({"keywords": keywords}, notice)
+
+    def _fallback_jd_match(self, notice: str | None = None) -> dict:
+        return self._mark_notice({
+            "matched": [],
+            "gaps": [],
+            "summary": "AI 分析暂时不可用，已使用本地示例结果。",
+        }, notice)
+
+    def _fallback_rewrite(self, notice: str | None = None) -> dict:
+        return self._mark_notice({
+            "overall_suggestion": "AI 优化暂时不可用，已使用本地示例结果。",
+            "rewrites": [],
+            "missing_keywords": [],
+            "ats_score_estimate": 0,
+        }, notice)
+
+    def _fallback_roadmap(self, notice: str | None = None) -> dict:
+        return self._mark_notice({
+            "summary": "AI 分析暂时不可用，已使用本地示例结果。",
+            "milestones": ["岗位匹配分析", "高频题训练", "STAR 表达打磨", "模拟面试复盘"],
+            "focusAreas": ["业务理解", "项目深挖", "结构化表达", "反问准备"],
+            "strengths": [],
+            "gaps": [],
+        }, notice)
 
     def assistant_system_prompt(self) -> str:
         return (

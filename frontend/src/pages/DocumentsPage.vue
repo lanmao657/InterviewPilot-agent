@@ -22,6 +22,7 @@ const jdFile = ref<File | null>(null)
 const jdText = ref('')
 const jdTab = ref<'file' | 'text'>('file')
 const message = ref('')
+const planNotices = ref<string[]>([])
 const planProgress = ref({ fit_score: false, keywords: false, roadmap: false })
 const resumeInputRef = ref<HTMLInputElement | null>(null)
 const jdInputRef = ref<HTMLInputElement | null>(null)
@@ -139,6 +140,7 @@ const planMutation = useMutation({
       message.value = errorMessage
       throw new Error(errorMessage)
     }
+    planNotices.value = []
     planProgress.value = { fit_score: false, keywords: false, roadmap: false }
     return api.createPlanStream(
       {
@@ -147,9 +149,17 @@ const planMutation = useMutation({
         title: `${targetRole.value} 面试准备计划`,
         target_role: targetRole.value,
       },
-      (event) => {
+      (event, data) => {
         if (event in planProgress.value) {
           planProgress.value[event as keyof typeof planProgress.value] = true
+        }
+        if (event === 'notice') {
+          const notice = data && typeof data === 'object' && 'message' in data
+            ? String((data as { message?: unknown }).message ?? '')
+            : ''
+          if (notice && !planNotices.value.includes(notice)) {
+            planNotices.value.push(notice)
+          }
         }
       },
     )
@@ -341,6 +351,9 @@ function formatTime(dateStr: string) {
         <p v-if="message" class="text-sm" :class="message.includes('失败') ? 'text-[var(--error)]' : 'text-[var(--primary)]'">
           {{ message }}
         </p>
+        <div v-if="planNotices.length" class="flex flex-col gap-1 text-xs text-[var(--warning)]">
+          <p v-for="notice in planNotices" :key="notice">{{ notice }}</p>
+        </div>
       </div>
     </div>
 
