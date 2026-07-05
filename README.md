@@ -107,6 +107,7 @@ docker compose up
 ```
 
 浏览器访问 `http://localhost:5173`，后端健康检查 `http://localhost:8000/health`。
+如果修改了 `backend/requirements.txt`、`frontend/package.json` 或 `frontend/package-lock.json`，请使用 `docker compose up --build` 重新构建依赖镜像。
 
 ### 方式二：本地开发
 

@@ -4,7 +4,7 @@ services:
       - "5432:5432"
 
   backend:
-    image: python:3.11-slim
+    build: ./backend
     working_dir: /app/backend
     volumes:
       - .:/app
@@ -12,7 +12,7 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+psycopg://interviewpilot:interviewpilot@db:5432/interviewpilot
-    command: sh -c "pip install -q -r requirements.txt && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8000:8000"
     depends_on:
@@ -20,14 +20,20 @@ services:
         condition: service_healthy
 
   frontend:
-    image: node:24-alpine
-    working_dir: /app/frontend
+    build:
+      context: ./frontend
+      target: dev
+    working_dir: /app
     volumes:
-      - .:/app
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
     environment:
       VITE_API_BASE_URL: http://localhost:8000/api
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    command: sh -c "npm run dev -- --host 0.0.0.0"
     ports:
       - "5173:5173"
     depends_on:
       - backend
+
+volumes:
+  frontend-node-modules:
