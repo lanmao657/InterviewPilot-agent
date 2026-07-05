@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
-from app.core.database import Base, SessionLocal, engine
+from app.core.database import SessionLocal
 from app.core.logging import get_logger, setup_logging
 from app.routers import assistant, auth, documents, interviews, prep_plans, questions, reports, streams
 from app.services.guest_cleanup import cleanup_expired_guests
@@ -18,7 +18,6 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
-    Base.metadata.create_all(bind=engine)
     settings = get_settings()
 
     def _cleanup_once() -> None:
