@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 30
     refresh_token_days: int = 14
+    guest_retention_hours: int = 24
+    guest_cleanup_interval_minutes: int = 60
 
     ai_base_url: str = "https://api.deepseek.com/v1"
     ai_api_key: str | None = None

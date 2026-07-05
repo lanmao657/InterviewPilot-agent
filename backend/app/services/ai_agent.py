@@ -108,6 +108,36 @@ class AIAgent:
             return {"评分标准": rubric}
         return {"clarity": 25, "structure": 25, "evidence": 25, "reflection": 25}
 
+    def _normalize_questions_payload(self, payload: object, focus: str, count: int) -> list[dict]:
+        """将模型返回的题目结构统一成可保存的数组。"""
+        if isinstance(payload, dict):
+            payload = payload.get("questions")
+        if not isinstance(payload, list):
+            return self._fallback_questions(focus, count)
+
+        questions: list[dict] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                return self._fallback_questions(focus, count)
+            category = item.get("category")
+            difficulty = item.get("difficulty")
+            prompt = item.get("prompt")
+            if not isinstance(category, str) or not category.strip():
+                return self._fallback_questions(focus, count)
+            if difficulty not in {"easy", "medium", "hard"}:
+                return self._fallback_questions(focus, count)
+            if not isinstance(prompt, str) or not prompt.strip():
+                return self._fallback_questions(focus, count)
+            questions.append(
+                {
+                    "category": category.strip(),
+                    "difficulty": difficulty,
+                    "prompt": prompt.strip(),
+                    "rubric": self._normalize_rubric(item.get("rubric")),
+                }
+            )
+        return questions or self._fallback_questions(focus, count)
+
     async def generate_questions(
         self, focus: str, count: int, user_id: int
     ) -> list[dict]:
@@ -125,10 +155,7 @@ class AIAgent:
 
         try:
             questions = json.loads(self._strip_code_fences(result))
-            for q in questions:
-                if isinstance(q, dict):
-                    q["rubric"] = self._normalize_rubric(q.get("rubric"))
-            return questions
+            return self._normalize_questions_payload(questions, focus, count)
         except json.JSONDecodeError:
             # 降级到固定模板
             return self._fallback_questions(focus, count)

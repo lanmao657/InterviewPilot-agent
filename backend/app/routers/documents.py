@@ -47,6 +47,9 @@ async def _save_document(kind: DocumentKind, file: UploadFile, user: User, db: S
         filename=file.filename or "uploaded-file",
         content=text,
         summary=summarize_document(text, kind.value),
+        embedding_status="pending",
+        embedding_error=None,
+        chunk_count=0,
     )
     db.add(doc)
     db.commit()
@@ -78,6 +81,9 @@ async def upload_jd_text(payload: JDTextInput, user: User = Depends(get_current_
         filename=payload.filename,
         content=text,
         summary=summarize_document(text, "job_description"),
+        embedding_status="pending",
+        embedding_error=None,
+        chunk_count=0,
     )
     db.add(doc)
     db.commit()

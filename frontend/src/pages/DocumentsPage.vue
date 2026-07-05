@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { BadgeCheck, ChevronDown, ChevronUp, ClipboardPaste, Eye, FileText, Loader2, Sparkles, Stethoscope, Trash2, Upload } from 'lucide-vue-next'
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import ResumeAnalysis from '@/components/ResumeAnalysis.vue'
@@ -35,11 +35,36 @@ const analyzingId = ref<number | null>(null)
 
 const resumes = computed(() => documentsQuery.data.value?.filter((item) => item.kind === 'resume') ?? [])
 const jds = computed(() => documentsQuery.data.value?.filter((item) => item.kind === 'job_description') ?? [])
+const hasIndexingDocuments = computed(() =>
+  documentsQuery.data.value?.some((item) => isEmbeddingBusy(item)) ?? false,
+)
+
+let documentsPollTimer: ReturnType<typeof setInterval> | null = null
+
+watch(
+  hasIndexingDocuments,
+  (active) => {
+    if (documentsPollTimer) {
+      clearInterval(documentsPollTimer)
+      documentsPollTimer = null
+    }
+    if (active) {
+      documentsPollTimer = setInterval(() => {
+        documentsQuery.refetch()
+      }, 3000)
+    }
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  if (documentsPollTimer) clearInterval(documentsPollTimer)
+})
 
 const uploadMutation = useMutation({
   mutationFn: ({ kind, file }: { kind: 'resume' | 'job-description'; file: File }) => api.uploadDocument(kind, file),
   onSuccess: () => {
-    message.value = '上传并解析成功'
+    message.value = '上传成功，正在建立语义索引'
     queryClient.invalidateQueries({ queryKey: ['documents'] })
   },
   onError: (err: Error) => {
@@ -92,7 +117,7 @@ const jdTextMutation = useMutation({
   mutationFn: (text: string) => api.uploadJDText(text),
   onSuccess: () => {
     jdText.value = ''
-    message.value = 'JD 文本上传并解析成功'
+    message.value = 'JD 文本上传成功，正在建立语义索引'
     queryClient.invalidateQueries({ queryKey: ['documents'] })
   },
   onError: (err: Error) => {
@@ -102,6 +127,18 @@ const jdTextMutation = useMutation({
 
 const planMutation = useMutation({
   mutationFn: async () => {
+    const selectedDocuments = [resumes.value[0], jds.value[0]].filter(Boolean) as DocumentItem[]
+    const busyDocument = selectedDocuments.find((doc) => isEmbeddingBusy(doc))
+    if (busyDocument) {
+      message.value = '文档语义索引仍在建立中，请稍后再试'
+      throw new Error('文档语义索引仍在建立中，请稍后再试')
+    }
+    const failedDocument = selectedDocuments.find((doc) => doc.embedding_status === 'failed')
+    if (failedDocument) {
+      const errorMessage = failedDocument.embedding_error || '文档语义索引建立失败，请重新上传或稍后重试'
+      message.value = errorMessage
+      throw new Error(errorMessage)
+    }
     planProgress.value = { fit_score: false, keywords: false, roadmap: false }
     return api.createPlanStream(
       {
@@ -122,7 +159,8 @@ const planMutation = useMutation({
     planProgress.value = { fit_score: false, keywords: false, roadmap: false }
     queryClient.invalidateQueries({ queryKey: ['plans'] })
   },
-  onError: () => {
+  onError: (err: Error) => {
+    message.value = err.message
     planProgress.value = { fit_score: false, keywords: false, roadmap: false }
   },
 })
@@ -150,6 +188,20 @@ function handleFileSelect(kind: 'resume' | 'job-description', event: Event) {
 
 function preview(doc: DocumentItem) {
   return String(doc.summary.preview ?? '').slice(0, 120)
+}
+
+function isEmbeddingBusy(doc: DocumentItem) {
+  return doc.embedding_status === 'pending' || doc.embedding_status === 'processing'
+}
+
+function embeddingBadge(doc: DocumentItem): { label: string; variant: 'success' | 'warning' | 'error' } {
+  if (doc.embedding_status === 'ready') {
+    return { label: doc.chunk_count > 0 ? `可检索 ${doc.chunk_count}` : '可检索', variant: 'success' }
+  }
+  if (doc.embedding_status === 'failed') {
+    return { label: '索引失败', variant: 'error' }
+  }
+  return { label: '建立中', variant: 'warning' }
 }
 
 function toggleExpand(docId: number) {
@@ -334,6 +386,9 @@ function formatTime(dateStr: string) {
               <Badge :variant="doc.kind === 'resume' ? 'default' : 'accent'">
                 {{ doc.kind === 'resume' ? '简历' : 'JD' }}
               </Badge>
+              <Badge :variant="embeddingBadge(doc).variant">
+                {{ embeddingBadge(doc).label }}
+              </Badge>
               <span class="text-xs text-[var(--text-muted)]">{{ formatTime(doc.created_at) }}</span>
             </div>
           </div>
@@ -341,6 +396,9 @@ function formatTime(dateStr: string) {
           <!-- 预览文本 -->
           <p class="mt-2 text-sm text-[var(--text-muted)]">
             {{ expandedDocId === doc.id ? String(doc.summary.preview ?? '') : preview(doc) }}
+          </p>
+          <p v-if="doc.embedding_status === 'failed' && doc.embedding_error" class="mt-1 text-xs text-[var(--error)]">
+            {{ doc.embedding_error }}
           </p>
 
           <!-- 操作按钮 -->

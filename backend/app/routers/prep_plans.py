@@ -19,6 +19,22 @@ router = APIRouter(prefix="/prep-plans", tags=["prep-plans"])
 logger = get_logger(__name__)
 
 
+def _embedding_status_value(document: Document) -> str:
+    status = document.embedding_status
+    return getattr(status, "value", status)
+
+
+def _ensure_embedding_ready(document: Document | None) -> None:
+    if not document:
+        return
+    status = _embedding_status_value(document)
+    if status in {"pending", "processing"}:
+        raise HTTPException(status_code=409, detail="文档语义索引仍在建立中，请稍后再试")
+    if status == "failed":
+        detail = document.embedding_error or "文档语义索引建立失败，请重新上传或稍后重试"
+        raise HTTPException(status_code=409, detail=detail)
+
+
 @router.post("/jd-match")
 async def analyze_jd_match(
     user: User = Depends(get_current_user),
@@ -43,6 +59,8 @@ async def create_plan(payload: PrepPlanCreate, user: User = Depends(get_current_
         raise HTTPException(status_code=404, detail="简历不存在")
     if jd and jd.user_id != user.id:
         raise HTTPException(status_code=404, detail="JD 不存在")
+    _ensure_embedding_ready(resume)
+    _ensure_embedding_ready(jd)
 
     agent = AIAgent(retrieval)
     resume_text = resume.content if resume else ""
@@ -114,6 +132,8 @@ async def create_plan_stream(
         raise HTTPException(status_code=404, detail="简历不存在")
     if jd and jd.user_id != user.id:
         raise HTTPException(status_code=404, detail="JD 不存在")
+    _ensure_embedding_ready(resume)
+    _ensure_embedding_ready(jd)
 
     agent = AIAgent(retrieval)
     resume_text = resume.content if resume else ""

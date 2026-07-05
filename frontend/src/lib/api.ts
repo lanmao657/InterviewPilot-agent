@@ -5,12 +5,16 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 export type User = { id: number; username: string; name: string; email: string | null; is_anonymous: boolean }
 export type TokenPair = { access_token: string; refresh_token: string; token_type: string; user: User }
+export type EmbeddingStatus = 'pending' | 'processing' | 'ready' | 'failed'
 export type DocumentItem = {
   id: number
   kind: 'resume' | 'job_description'
   filename: string
   summary: Record<string, unknown>
   analysis?: Record<string, unknown> | null
+  embedding_status: EmbeddingStatus
+  embedding_error: string | null
+  chunk_count: number
   created_at: string
 }
 export type PrepPlan = { id: number; title: string; target_role: string; fit_score: number; status: string; roadmap: Record<string, unknown>; created_at: string }

@@ -13,6 +13,7 @@ import { api } from '@/lib/api'
 const queryClient = useQueryClient()
 const focus = ref('项目深挖与 STAR 表达')
 const count = ref(6)
+const message = ref('')
 const questionsQuery = useQuery({ queryKey: ['questions'], queryFn: api.questions })
 const plansQuery = useQuery({ queryKey: ['plans'], queryFn: api.plans })
 
@@ -21,20 +22,34 @@ const answerCards = ref<Array<Record<string, unknown>>>([])
 const showCards = ref(false)
 
 const generateMutation = useMutation({
-  mutationFn: () =>
-    api.generateQuestions({
+  mutationFn: async () => {
+    message.value = ''
+    return api.generateQuestions({
       prep_plan_id: plansQuery.data.value?.[0]?.id,
       count: count.value,
       focus: focus.value,
-    }),
-  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['questions'] }),
+    })
+  },
+  onSuccess: () => {
+    message.value = '题目已生成'
+    queryClient.invalidateQueries({ queryKey: ['questions'] })
+  },
+  onError: (err: Error) => {
+    message.value = `生成失败：${err.message}`
+  },
 })
 
 const cardMutation = useMutation({
-  mutationFn: () => api.answerCards(),
+  mutationFn: async () => {
+    message.value = ''
+    return api.answerCards()
+  },
   onSuccess: (data) => {
     answerCards.value = data
     showCards.value = true
+  },
+  onError: (err: Error) => {
+    message.value = `话术卡片生成失败：${err.message}`
   },
 })
 
@@ -77,6 +92,9 @@ const difficultyVariant: Record<string, 'default' | 'accent' | 'warning'> = {
           </Button>
         </div>
       </div>
+      <p v-if="message" class="mt-3 text-sm" :class="message.includes('失败') ? 'text-[var(--error)]' : 'text-[var(--primary)]'">
+        {{ message }}
+      </p>
     </div>
 
     <!-- 话术卡片展示 -->

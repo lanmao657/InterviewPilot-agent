@@ -13,11 +13,14 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.models import Document, DocumentChunk
 from app.services.embedding import EmbeddingService
+from app.services.retrieval import clear_rag_cache
 
 logger = logging.getLogger(__name__)
 
 # pypdf 提取结果低于此字符数时，判定为扫描件，走 OCR 回退
 _OCR_THRESHOLD = 50
+_EMPTY_INDEX_ERROR = "未解析到可用于索引的文本，请检查文件内容。"
+_GENERIC_INDEX_ERROR = "文档语义索引建立失败，请稍后重试。"
 
 
 async def _ocr_pdf_with_vision(data: bytes) -> str:
@@ -124,7 +127,6 @@ class DocumentService:
 
     async def process_document(self, document_id: int) -> None:
         """处理文档：切片 + 向量化"""
-        # 获取文档
         result = self.db.execute(
             select(Document).where(Document.id == document_id)
         )
@@ -132,29 +134,57 @@ class DocumentService:
         if not document:
             return
 
-        # 先删除已有的切片（幂等性保护）
-        self.db.execute(
-            delete(DocumentChunk).where(DocumentChunk.document_id == document_id)
-        )
-
-        # 切片
-        chunks = self.embedding_service.chunk_text(document.content)
-
-        # 生成 embeddings
-        embeddings = await self.embedding_service.embed(chunks)
-
-        # 保存切片到数据库
-        for i, (chunk_content, embedding) in enumerate(zip(chunks, embeddings)):
-            chunk = DocumentChunk(
-                document_id=document_id,
-                user_id=document.user_id,
-                chunk_index=i,
-                content=chunk_content,
-                embedding=embedding,
-            )
-            self.db.add(chunk)
-
+        document.embedding_status = "processing"
+        document.embedding_error = None
+        document.chunk_count = 0
+        self.db.add(document)
         self.db.commit()
+
+        try:
+            # 先删除已有的切片（幂等性保护）
+            self.db.execute(
+                delete(DocumentChunk).where(DocumentChunk.document_id == document_id)
+            )
+
+            chunks = [
+                chunk
+                for chunk in self.embedding_service.chunk_text(document.content)
+                if chunk.strip()
+            ]
+            if not chunks:
+                raise ValueError(_EMPTY_INDEX_ERROR)
+
+            embeddings = await self.embedding_service.embed(chunks)
+            if len(embeddings) != len(chunks):
+                raise RuntimeError("embedding count mismatch")
+
+            for i, (chunk_content, embedding) in enumerate(zip(chunks, embeddings)):
+                chunk = DocumentChunk(
+                    document_id=document_id,
+                    user_id=document.user_id,
+                    chunk_index=i,
+                    content=chunk_content,
+                    embedding=embedding,
+                )
+                self.db.add(chunk)
+
+            document.embedding_status = "ready"
+            document.embedding_error = None
+            document.chunk_count = len(chunks)
+            self.db.add(document)
+            self.db.commit()
+            clear_rag_cache()
+        except Exception as exc:
+            self.db.rollback()
+            self.db.execute(
+                delete(DocumentChunk).where(DocumentChunk.document_id == document_id)
+            )
+            document.embedding_status = "failed"
+            document.embedding_error = _EMPTY_INDEX_ERROR if str(exc) == _EMPTY_INDEX_ERROR else _GENERIC_INDEX_ERROR
+            document.chunk_count = 0
+            self.db.add(document)
+            self.db.commit()
+            logger.exception("document_embedding_failed document_id=%s error=%s", document_id, exc)
 
     def summarize_document(self, text: str, kind: str) -> dict:
         """生成文档摘要"""
