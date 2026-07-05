@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
 import { ArrowDownRight, ArrowUpRight, FileBarChart, Printer } from 'lucide-vue-next'
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import RadarChart from '@/components/charts/RadarChart.vue'
-import TrendChart from '@/components/charts/TrendChart.vue'
 import ShareCard from '@/components/ShareCard.vue'
 import { api } from '@/lib/api'
+
+const RadarChart = defineAsyncComponent(() => import('@/components/charts/RadarChart.vue'))
+const TrendChart = defineAsyncComponent(() => import('@/components/charts/TrendChart.vue'))
 
 const reportsQuery = useQuery({ queryKey: ['reports'], queryFn: api.reports })
 const trendQuery = useQuery({ queryKey: ['report-trend'], queryFn: api.reportTrend })

@@ -4,9 +4,15 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
-import * as echarts from 'echarts'
+import { LineChart } from 'echarts/charts'
+import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
+import * as echarts from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import type { ECharts } from 'echarts/core'
 
 import { useThemeStore } from '@/stores/theme'
+
+echarts.use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
 interface TrendPoint {
   label: string
@@ -25,7 +31,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), { multiDimension: false })
 const theme = useThemeStore()
 const chartRef = ref<HTMLElement>()
-let chart: echarts.ECharts | null = null
+let chart: ECharts | null = null
 
 const isDark = computed(() => theme.resolved === 'dark')
 

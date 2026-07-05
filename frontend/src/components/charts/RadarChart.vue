@@ -4,9 +4,15 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
-import * as echarts from 'echarts'
+import { RadarChart } from 'echarts/charts'
+import { LegendComponent, TooltipComponent } from 'echarts/components'
+import * as echarts from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import type { ECharts } from 'echarts/core'
 
 import { useThemeStore } from '@/stores/theme'
+
+echarts.use([RadarChart, TooltipComponent, LegendComponent, CanvasRenderer])
 
 interface Props {
   data: {
@@ -20,7 +26,7 @@ interface Props {
 const props = defineProps<Props>()
 const theme = useThemeStore()
 const chartRef = ref<HTMLElement>()
-let chart: echarts.ECharts | null = null
+let chart: ECharts | null = null
 
 const isDark = computed(() => theme.resolved === 'dark')
 
