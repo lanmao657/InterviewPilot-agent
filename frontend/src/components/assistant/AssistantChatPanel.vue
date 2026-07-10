@@ -20,9 +20,16 @@ onMounted(() => {
 })
 
 async function send() {
-  const message = input.value
+  const message = input.value.trim()
+  if (!message || assistant.isStreaming) return
   input.value = ''
   await assistant.send(message)
+}
+
+function handleInputKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
+  event.preventDefault()
+  send()
 }
 
 watch(
@@ -84,7 +91,7 @@ watch(
         v-model="input"
         :class="compact ? 'min-h-16' : 'min-h-20'"
         placeholder="问问 AI 助手，比如：我下一步该怎么准备？"
-        @keydown.ctrl.enter.prevent="send"
+        @keydown="handleInputKeydown"
       />
       <Button type="submit" size="icon" :disabled="assistant.isStreaming || !input.trim()">
         <Send class="size-4" />
