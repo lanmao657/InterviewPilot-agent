@@ -1,20 +1,37 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { parseSseBlock, api } from './api'
+import { parseSseBlock, streamApi, api } from './api'
 import { useAuthStore } from '@/stores/auth'
 
 describe('SSE parsing', () => {
-  it('joins multiple data lines with newlines', () => {
-    const event = parseSseBlock('event: message\ndata: 第一行\ndata: 第二行')
+  it('joins multiple data lines while preserving blank lines', () => {
+    const event = parseSseBlock('event: message\ndata: 第一段\ndata: \ndata: 第二段')
 
-    expect(event).toEqual({ event: 'message', data: '第一行\n第二行' })
+    expect(event).toEqual({ event: 'message', data: '第一段\n\n第二段' })
   })
 
   it('marks error events', () => {
     const event = parseSseBlock('event: error\ndata: 流式失败')
 
     expect(event).toEqual({ event: 'error', data: '流式失败' })
+  })
+
+  it('delivers multiline chunks before the done event', async () => {
+    setActivePinia(createPinia())
+    const chunks: string[] = []
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      'data: 第一段\ndata: \ndata: 第二段\n\nevent: done\ndata: [DONE]\n\n',
+      { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+    )))
+
+    try {
+      await streamApi('/stream/test', (chunk) => chunks.push(chunk))
+    } finally {
+      vi.unstubAllGlobals()
+    }
+
+    expect(chunks).toEqual(['第一段\n\n第二段'])
   })
 })
 
