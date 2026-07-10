@@ -3,44 +3,127 @@ import {
   AlertTriangle,
   BarChart3,
   BookOpenCheck,
-  Bot,
   FileText,
   Gauge,
   LogOut,
   Menu,
+  MessageCircleQuestion,
   MessageSquareText,
   Settings,
   UserCircle,
   X,
 } from 'lucide-vue-next'
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 
-import GlobalAssistantWidget from '@/components/assistant/GlobalAssistantWidget.vue'
 import ThemeToggle from '@/components/layout/ThemeToggle.vue'
 import { Button } from '@/components/ui/button'
 import ToastContainer from '@/components/ui/toast/ToastContainer.vue'
 import { useAuthStore } from '@/stores/auth'
+
+type NavItem = {
+  label: string
+  shortLabel?: string
+  path: string
+  icon: typeof Gauge
+  description: string
+}
+
+type NavGroup = {
+  label: '准备' | '训练' | '复盘'
+  items: NavItem[]
+}
+
+const overviewItem: NavItem = {
+  label: '概览',
+  path: '/dashboard',
+  icon: Gauge,
+  description: '查看当前阶段与下一项准备任务',
+}
+
+const navGroups: NavGroup[] = [
+  {
+    label: '准备',
+    items: [
+      { label: '材料工作区', shortLabel: '材料', path: '/documents', icon: FileText, description: '整理简历、岗位描述与准备计划' },
+    ],
+  },
+  {
+    label: '训练',
+    items: [
+      { label: '题库', path: '/questions', icon: BookOpenCheck, description: '生成并筛选针对性面试题' },
+      { label: '模拟面试', shortLabel: '面试', path: '/interview', icon: MessageSquareText, description: '练习回答并获得即时反馈' },
+    ],
+  },
+  {
+    label: '复盘',
+    items: [
+      { label: '能力报告', shortLabel: '报告', path: '/reports', icon: BarChart3, description: '查看表现趋势与下一步改进重点' },
+    ],
+  },
+]
+
+const settingsItem: NavItem = {
+  label: '设置',
+  path: '/settings',
+  icon: Settings,
+  description: '管理主题与产品配置说明',
+}
+
+const coachItem: NavItem = {
+  label: '教练对话',
+  path: '/assistant',
+  icon: MessageCircleQuestion,
+  description: '结合你的材料与训练记录获得建议',
+}
+
+const allItems = [overviewItem, ...navGroups.flatMap((group) => group.items), coachItem, settingsItem]
+const mobileNavItems = [overviewItem, navGroups[0].items[0], navGroups[1].items[0], navGroups[1].items[1], navGroups[2].items[0]]
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const sidebarOpen = ref(false)
 const showGuestLogoutConfirm = ref(false)
+const mainContent = ref<HTMLElement | null>(null)
+const guestDialog = ref<HTMLElement | null>(null)
 
-const navItems = [
-  { label: '仪表盘', path: '/dashboard', icon: Gauge },
-  { label: '简历与 JD', path: '/documents', icon: FileText },
-  { label: '题库', path: '/questions', icon: BookOpenCheck },
-  { label: '模拟面试', path: '/interview', icon: MessageSquareText },
-  { label: 'AI 助手', path: '/assistant', icon: Bot },
-  { label: '报告', path: '/reports', icon: BarChart3 },
-  { label: '设置', path: '/settings', icon: Settings },
-]
+const currentPage = computed(() => {
+  if (route.path.startsWith('/plans/')) {
+    return { label: '准备计划', description: '把岗位差距转成可执行的准备路线' }
+  }
+  return allItems.find((item) => route.path.startsWith(item.path)) ?? overviewItem
+})
 
-const mobileNavItems = navItems.slice(0, 5)
+watch(
+  () => route.path,
+  async () => {
+    sidebarOpen.value = false
+    await nextTick()
+    mainContent.value?.focus({ preventScroll: true })
+  },
+)
 
-const pageTitle = computed(() => navItems.find((item) => route.path.startsWith(item.path))?.label ?? '仪表盘')
+watch(showGuestLogoutConfirm, async (open) => {
+  if (!open) return
+  await nextTick()
+  guestDialog.value?.querySelector<HTMLElement>('[data-testid="guest-register-action"]')?.focus()
+})
+
+function trapDialogFocus(event: KeyboardEvent) {
+  if (event.key !== 'Tab' || !guestDialog.value) return
+  const focusable = Array.from(guestDialog.value.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+  if (!focusable.length) return
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
 
 function logout() {
   if (auth.isGuest) {
@@ -57,190 +140,203 @@ function confirmGuestLogout() {
   router.push('/login')
 }
 
-function cancelGuestLogout() {
-  showGuestLogoutConfirm.value = false
-}
-
 function goToGuestRegistration() {
   showGuestLogoutConfirm.value = false
   router.push('/login?mode=register&guest=1')
 }
-
-function closeSidebar() {
-  sidebarOpen.value = false
-}
 </script>
 
 <template>
-  <div class="flex min-h-screen">
-    <!-- 移动端遮罩 -->
+  <div class="flex min-h-screen bg-[var(--bg)]">
+    <a
+      href="#main-content"
+      class="focus-ring fixed left-4 top-3 z-[300] -translate-y-20 rounded-[var(--radius-sm)] bg-[var(--text-primary)] px-4 py-2 text-sm text-[var(--bg)] transition-transform focus:translate-y-0"
+    >
+      跳到主要内容
+    </a>
+
     <Transition name="fade">
-      <div
+      <button
         v-if="sidebarOpen"
-        class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
-        @click="closeSidebar"
+        class="fixed inset-0 z-40 bg-black/50 lg:hidden"
+        aria-label="关闭导航"
+        @click="sidebarOpen = false"
       />
     </Transition>
 
-    <!-- 侧边栏 -->
     <aside
-      class="fixed inset-y-0 left-0 z-50 flex w-72 flex-col glass-elevated transition-transform duration-300 lg:static lg:translate-x-0"
+      class="fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-[var(--border)] bg-[var(--surface)] transition-transform duration-200 lg:static lg:translate-x-0"
       :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+      aria-label="桌面端主导航"
     >
-      <!-- Logo -->
-      <div class="flex items-center justify-between gap-3 px-5 py-5">
-        <div class="flex items-center gap-3">
-          <div class="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)] text-sm font-bold text-white shadow-md">
+      <div class="flex items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-5">
+        <RouterLink to="/dashboard" class="focus-ring flex items-center gap-3 rounded-[var(--radius-sm)]">
+          <span class="grid size-10 place-items-center rounded-[var(--radius-sm)] bg-[var(--text-primary)] text-xs font-bold tracking-[0.14em] text-[var(--bg)]">
             IP
-          </div>
-          <div>
-            <p class="text-base font-semibold">InterviewPilot</p>
-            <p class="text-xs text-[var(--text-muted)]">AI 面试准备</p>
-          </div>
-        </div>
-        <Button variant="ghost" size="icon" class="lg:hidden" @click="closeSidebar">
+          </span>
+          <span>
+            <span class="font-display block text-base font-semibold">InterviewPilot</span>
+            <span class="block text-xs text-[var(--text-muted)]">面试准备工作台</span>
+          </span>
+        </RouterLink>
+        <Button variant="ghost" size="icon" class="lg:hidden" aria-label="关闭导航" @click="sidebarOpen = false">
           <X class="size-5" />
         </Button>
       </div>
 
-      <!-- 导航 -->
-      <nav class="mt-4 flex flex-1 flex-col gap-1 px-3">
+      <nav class="flex flex-1 flex-col overflow-y-auto px-3 py-5">
         <RouterLink
-          v-for="item in navItems"
-          :key="item.path"
-          :to="item.path"
-          class="group relative flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-[var(--text-secondary)] transition-all duration-200 hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]"
-          :class="{ 'bg-[var(--primary)]/10 text-[var(--primary)]': route.path.startsWith(item.path) }"
-          @click="closeSidebar"
+          :to="overviewItem.path"
+          class="focus-ring flex min-h-11 items-center gap-3 rounded-[var(--radius-md)] px-3 text-sm font-semibold transition-colors"
+          :class="route.path.startsWith(overviewItem.path)
+            ? 'bg-[var(--text-primary)] text-[var(--bg)]'
+            : 'text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]'"
         >
-          <div
-            v-if="route.path.startsWith(item.path)"
-            class="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[var(--primary)]"
-          />
-          <component :is="item.icon" class="size-5" />
-          {{ item.label }}
+          <Gauge class="size-4.5" />
+          概览
         </RouterLink>
-      </nav>
 
-      <!-- 用户信息 -->
-      <div class="mx-3 mb-4 rounded-xl glass-flat p-3">
-        <div class="flex items-center gap-3">
-          <div class="grid size-9 place-items-center rounded-full bg-[var(--primary)]/10">
-            <UserCircle class="size-5 text-[var(--primary)]" />
-          </div>
-          <div class="min-w-0 flex-1">
-            <p class="truncate text-sm font-medium">{{ auth.user?.name }}</p>
-            <p class="truncate text-xs text-[var(--text-muted)]">{{ auth.user?.username }}</p>
+        <div v-for="group in navGroups" :key="group.label" class="mt-6">
+          <p class="mb-2 px-3 text-[11px] font-bold tracking-[0.16em] text-[var(--text-muted)]">
+            {{ group.label }}
+          </p>
+          <div class="flex flex-col gap-1">
+            <RouterLink
+              v-for="item in group.items"
+              :key="item.path"
+              :to="item.path"
+              class="focus-ring flex min-h-11 items-center gap-3 rounded-[var(--radius-md)] px-3 text-sm font-medium transition-colors"
+              :class="route.path.startsWith(item.path)
+                ? 'bg-[var(--primary)]/10 text-[var(--primary)]'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]'"
+            >
+              <component :is="item.icon" class="size-4.5" />
+              {{ item.label }}
+            </RouterLink>
           </div>
         </div>
-        <Button variant="ghost" size="sm" class="mt-2 w-full justify-start" @click="logout">
-          <LogOut class="size-4" />
-          退出登录
-        </Button>
+      </nav>
+
+      <div class="border-t border-[var(--border)] p-3">
+        <RouterLink
+          to="/settings"
+          class="focus-ring mb-2 flex min-h-11 items-center gap-3 rounded-[var(--radius-md)] px-3 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-muted)]"
+        >
+          <Settings class="size-4.5" />
+          设置
+        </RouterLink>
+        <div class="rounded-[var(--radius-md)] bg-[var(--surface-muted)] p-3">
+          <div class="flex items-center gap-3">
+            <UserCircle class="size-8 shrink-0 text-[var(--text-secondary)]" />
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-semibold">{{ auth.user?.name }}</p>
+              <p class="truncate text-xs text-[var(--text-muted)]">{{ auth.user?.username }}</p>
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" class="mt-2 w-full justify-start" @click="logout">
+            <LogOut class="size-4" />
+            退出登录
+          </Button>
+        </div>
       </div>
     </aside>
 
-    <!-- 主内容区 -->
-    <main class="flex min-w-0 flex-1 flex-col">
-      <!-- 游客提示横幅 -->
-      <Transition name="fade">
-        <div
-          v-if="auth.isGuest"
-          class="flex items-center justify-center gap-2 border-b border-[var(--warning)]/30 bg-[var(--warning)]/10 px-4 py-2 text-sm"
-        >
-          <AlertTriangle class="size-4 text-[var(--warning)]" />
-          <span class="text-[var(--text-secondary)]">当前为游客模式，数据仅在本次会话中保存</span>
-          <Button variant="ghost" size="sm" @click="goToGuestRegistration">
-            注册正式账号
-          </Button>
-        </div>
-      </Transition>
+    <div class="flex min-w-0 flex-1 flex-col">
+      <div
+        v-if="auth.isGuest"
+        class="flex flex-wrap items-center justify-center gap-2 border-b border-[var(--warning)]/30 bg-[var(--warning-light)] px-4 py-2 text-sm"
+      >
+        <AlertTriangle class="size-4 text-[var(--warning)]" />
+        <span class="text-[var(--text-secondary)]">游客数据仅在本次会话中保存</span>
+        <Button variant="ghost" size="sm" @click="goToGuestRegistration">注册正式账号</Button>
+      </div>
 
-      <!-- Header -->
-      <header class="sticky top-0 z-30 glass border-b border-[var(--glass-border)]">
-        <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-5 py-3">
-          <div class="flex items-center gap-3">
-            <Button variant="ghost" size="icon" class="lg:hidden" @click="sidebarOpen = true">
+      <header class="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--bg)]/95">
+        <div class="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <div class="flex min-w-0 items-center gap-3">
+            <Button variant="ghost" size="icon" class="shrink-0 lg:hidden" aria-label="打开导航" @click="sidebarOpen = true">
               <Menu class="size-5" />
             </Button>
-            <div>
-              <p class="text-xs font-medium text-[var(--text-muted)]">InterviewPilot</p>
-              <h1 class="text-lg font-semibold">{{ pageTitle }}</h1>
+            <div class="min-w-0">
+              <h1 class="truncate text-xl font-semibold">{{ currentPage.label }}</h1>
+              <p class="hidden truncate text-xs text-[var(--text-muted)] sm:block">{{ currentPage.description }}</p>
             </div>
           </div>
           <div class="flex items-center gap-2">
             <ThemeToggle />
-            <Button variant="secondary" size="sm" class="hidden sm:inline-flex" @click="router.push('/assistant')">
-              <Bot class="size-4" />
-              AI 助手
+            <Button
+              data-testid="coach-entry"
+              variant="secondary"
+              size="sm"
+              @click="router.push('/assistant')"
+            >
+              <MessageCircleQuestion class="size-4" />
+              <span class="hidden sm:inline">问教练</span>
             </Button>
-            <Button size="sm" @click="router.push('/interview')">
-              <MessageSquareText class="size-4" />
-              <span class="hidden sm:inline">开始练习</span>
+            <Button size="sm" class="hidden md:inline-flex" @click="router.push('/interview')">
+              开始练习
             </Button>
           </div>
         </div>
       </header>
 
-      <!-- 页面内容 -->
-      <div class="mx-auto w-full max-w-7xl flex-1 px-4 py-5 sm:px-6 lg:px-8">
-        <RouterView v-slot="{ Component }">
-          <Transition name="page" mode="out-in">
-            <component :is="Component" />
-          </Transition>
-        </RouterView>
-      </div>
+      <main
+        id="main-content"
+        ref="mainContent"
+        tabindex="-1"
+        class="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 outline-none sm:px-6 lg:px-8 lg:py-8"
+      >
+        <RouterView />
+      </main>
 
-      <!-- 移动端底部导航 -->
-      <nav class="fixed bottom-0 left-0 right-0 z-30 glass border-t border-[var(--glass-border)] pb-[env(safe-area-inset-bottom)] lg:hidden">
-        <div class="flex items-center justify-around px-2 py-2">
+      <nav
+        aria-label="移动端主导航"
+        class="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--border)] bg-[var(--surface)] pb-[env(safe-area-inset-bottom)] lg:hidden"
+      >
+        <div class="grid grid-cols-5 px-1 py-1.5">
           <RouterLink
             v-for="item in mobileNavItems"
             :key="item.path"
             :to="item.path"
-            class="flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] font-medium transition-colors"
+            class="focus-ring flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-sm)] px-1 text-[10px] font-semibold transition-colors"
             :class="route.path.startsWith(item.path) ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]'"
           >
             <component :is="item.icon" class="size-5" />
-            {{ item.label }}
+            {{ item.shortLabel ?? item.label }}
           </RouterLink>
         </div>
       </nav>
+      <div class="h-20 lg:hidden" />
+    </div>
 
-      <!-- 移动端底部导航占位 -->
-      <div class="h-16 lg:hidden" />
-    </main>
-
-    <GlobalAssistantWidget />
     <ToastContainer />
 
-    <!-- 游客退出确认对话框 -->
     <Transition name="fade">
       <div
         v-if="showGuestLogoutConfirm"
-        class="fixed inset-0 z-[100] grid place-items-center bg-black/50 backdrop-blur-sm"
-        @click.self="cancelGuestLogout"
+        ref="guestDialog"
+        class="fixed inset-0 z-[100] grid place-items-center bg-black/55 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="guest-logout-title"
+        tabindex="-1"
+        @click.self="showGuestLogoutConfirm = false"
+        @keydown.esc="showGuestLogoutConfirm = false"
+        @keydown.tab="trapDialogFocus"
       >
-        <div class="glass-elevated mx-4 w-full max-w-sm rounded-2xl p-6 animate-fade-in-up">
-          <div class="mb-4 flex items-center gap-3">
-            <div class="grid size-10 place-items-center rounded-full bg-[var(--warning)]/10">
+        <div class="surface-raised w-full max-w-sm rounded-[var(--radius-lg)] p-6">
+          <div class="mb-4 flex items-start gap-3">
+            <span class="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--warning-light)]">
               <AlertTriangle class="size-5 text-[var(--warning)]" />
-            </div>
+            </span>
             <div>
-              <h3 class="font-semibold">确认退出游客模式？</h3>
-              <p class="mt-1 text-xs text-[var(--text-muted)]">游客数据将在 24 小时后清除</p>
+              <h2 id="guest-logout-title" class="text-lg font-semibold">确认退出游客模式？</h2>
+              <p class="mt-1 text-sm text-[var(--text-secondary)]">未注册的数据将在 24 小时后清除。</p>
             </div>
           </div>
-          <p class="mb-5 text-sm text-[var(--text-secondary)]">
-            你上传的简历、面试记录和复盘报告将会丢失。建议注册正式账号保存数据。
-          </p>
-          <div class="flex gap-3">
-            <Button class="flex-1" @click="goToGuestRegistration">
-              注册正式账号
-            </Button>
-            <Button variant="secondary" class="flex-1" @click="confirmGuestLogout">
-              仍然退出
-            </Button>
+          <div class="flex flex-col gap-2 sm:flex-row">
+            <Button data-testid="guest-register-action" class="flex-1" @click="goToGuestRegistration">注册正式账号</Button>
+            <Button variant="secondary" class="flex-1" @click="confirmGuestLogout">仍然退出</Button>
           </div>
         </div>
       </div>
@@ -251,26 +347,11 @@ function closeSidebar() {
 <style scoped>
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 200ms ease;
+  transition: opacity var(--duration-fast) ease;
 }
+
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-}
-
-.page-enter-active {
-  animation: fade-in-up 300ms ease-out;
-}
-.page-leave-active {
-  animation: fade-out-up 200ms ease-in;
-}
-
-@keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes fade-out-up {
-  from { opacity: 1; transform: translateY(0); }
-  to { opacity: 0; transform: translateY(-8px); }
 }
 </style>

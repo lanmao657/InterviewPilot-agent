@@ -5,17 +5,17 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const badgeVariants = cva(
-  'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors',
+  'inline-flex items-center rounded-[var(--radius-sm)] border px-2 py-1 text-xs font-semibold leading-none',
   {
     variants: {
       variant: {
-        default: 'bg-[var(--primary)]/10 text-[var(--primary)]',
-        secondary: 'bg-[var(--text-muted)]/10 text-[var(--text-secondary)]',
-        outline: 'border border-[var(--glass-border)] text-[var(--text-secondary)]',
-        accent: 'bg-[var(--accent)]/10 text-[var(--accent)]',
-        success: 'bg-[var(--success)]/10 text-[var(--success)]',
-        warning: 'bg-[var(--warning)]/10 text-[var(--warning)]',
-        error: 'bg-[var(--error)]/10 text-[var(--error)]',
+        default: 'border-[var(--primary)]/30 bg-[var(--primary)]/10 text-[var(--primary)]',
+        secondary: 'border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-secondary)]',
+        outline: 'border-[var(--border-strong)] bg-transparent text-[var(--text-secondary)]',
+        accent: 'border-[var(--accent)]/30 bg-[var(--accent)]/10 text-[var(--accent)]',
+        success: 'border-[var(--success)]/30 bg-[var(--success-light)] text-[var(--success)]',
+        warning: 'border-[var(--warning)]/30 bg-[var(--warning-light)] text-[var(--warning)]',
+        error: 'border-[var(--error)]/30 bg-[var(--error-light)] text-[var(--error)]',
       },
     },
     defaultVariants: {

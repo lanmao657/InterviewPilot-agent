@@ -15,6 +15,25 @@ const reportsQuery = useQuery({ queryKey: ['reports'], queryFn: api.reports })
 const trendQuery = useQuery({ queryKey: ['report-trend'], queryFn: api.reportTrend })
 const plansQuery = useQuery({ queryKey: ['plans'], queryFn: api.plans })
 const historyQuery = useQuery({ queryKey: ['answer-history'], queryFn: api.answerHistory })
+const dimensionLabels: Record<string, string> = {
+  clarity: '表达清晰度',
+  structure: '结构化程度',
+  evidence: '证据充分度',
+  reflection: '复盘深度',
+}
+
+const reportInsight = computed(() => {
+  const latest = reportsQuery.data.value?.[0]
+  if (!latest) return null
+  const metrics = latest.metrics ?? {}
+  const weakest = Object.keys(dimensionLabels)
+    .map((key) => ({ key, score: Number(metrics[key] ?? 0) }))
+    .sort((a, b) => a.score - b.score)[0]
+  return {
+    title: `下一轮优先补强${dimensionLabels[weakest.key]}`,
+    detail: `当前 ${weakest.score} 分。先围绕这一项完成一次针对练习，再观察整体得分变化。`,
+  }
+})
 
 // 最新报告的四维分数
 const averageScores = computed(() => {
@@ -46,16 +65,9 @@ const dimensionAnalysis = computed(() => {
   const first = data[0] as Record<string, number>
   const last = data[data.length - 1] as Record<string, number>
   const dims = ['clarity', 'structure', 'evidence', 'reflection'] as const
-  const dimLabels: Record<string, string> = {
-    clarity: '表达清晰度',
-    structure: '结构化程度',
-    evidence: '证据充分度',
-    reflection: '复盘深度',
-  }
-
   const changes = dims.map((dim) => ({
     dim,
-    label: dimLabels[dim],
+    label: dimensionLabels[dim],
     first: first[dim] ?? 0,
     last: last[dim] ?? 0,
     change: (last[dim] ?? 0) - (first[dim] ?? 0),
@@ -95,13 +107,7 @@ function exportPDF() {
   if (!reports?.length) return
   const latest = reports[0]
   const scores = latest.metrics ?? {}
-  const dimLabels: Record<string, string> = {
-    clarity: '表达清晰度',
-    structure: '结构化程度',
-    evidence: '证据充分度',
-    reflection: '复盘深度',
-  }
-  const scoreRows = Object.entries(dimLabels)
+  const scoreRows = Object.entries(dimensionLabels)
     .map(([key, label]) => `<tr><td>${label}</td><td style="text-align:right;font-weight:bold">${scores[key] ?? 0} 分</td></tr>`)
     .join('')
   const safeTitle = escapeHtml(latest.title)
@@ -122,7 +128,7 @@ th{background:#f3f4f6;font-weight:600}
 <p>综合得分：<span class="score">${latest.overall_score} 分</span></p>
 <table><thead><tr><th>维度</th><th>分数</th></tr></thead><tbody>${scoreRows}</tbody></table>
 <div class="content">${safeContent}</div>
-<div class="footer">来自 InterviewPilot — AI 面试准备平台 · ${new Date().toLocaleDateString('zh-CN')}</div>
+<div class="footer">来自 InterviewPilot 面试准备工作台 · ${new Date().toLocaleDateString('zh-CN')}</div>
 </body></html>`
   const win = window.open('', '_blank')
   if (win) {
@@ -134,10 +140,19 @@ th{background:#f3f4f6;font-weight:600}
 </script>
 
 <template>
-  <div class="flex flex-col gap-6">
+  <div class="flex flex-col gap-8">
+    <section
+      v-if="reportInsight"
+      data-testid="report-insight"
+      class="surface-raised rounded-[var(--radius-lg)] border-l-4 border-l-[var(--primary)] p-6 sm:p-8"
+    >
+      <p class="eyebrow">本轮结论</p>
+      <h2 class="mt-2 text-2xl font-semibold">{{ reportInsight.title }}</h2>
+      <p class="mt-3 max-w-3xl text-sm leading-7 text-[var(--text-secondary)]">{{ reportInsight.detail }}</p>
+    </section>
     <!-- 进步/改进维度卡片 -->
     <div v-if="dimensionAnalysis" class="grid gap-4 sm:grid-cols-2">
-      <div class="glass rounded-2xl p-4 flex items-center gap-4">
+      <div class="surface flex items-center gap-4 rounded-[var(--radius-lg)] p-4">
         <div class="grid size-10 place-items-center rounded-full bg-[var(--success)]/10">
           <ArrowUpRight class="size-5 text-[var(--success)]" />
         </div>
@@ -149,7 +164,7 @@ th{background:#f3f4f6;font-weight:600}
           </p>
         </div>
       </div>
-      <div class="glass rounded-2xl p-4 flex items-center gap-4">
+      <div class="surface flex items-center gap-4 rounded-[var(--radius-lg)] p-4">
         <div class="grid size-10 place-items-center rounded-full bg-[var(--warning)]/10">
           <ArrowDownRight class="size-5 text-[var(--warning)]" />
         </div>
@@ -165,12 +180,17 @@ th{background:#f3f4f6;font-weight:600}
 
     <!-- 图表区域 -->
     <div class="grid gap-4 md:grid-cols-2">
-      <div class="glass rounded-2xl p-5">
-        <h3 class="mb-4 text-base font-semibold">能力维度分析</h3>
+      <div class="surface rounded-[var(--radius-lg)] p-5" aria-label="最新报告能力维度图">
+        <h2 class="mb-1 text-lg font-semibold">能力维度</h2>
+        <p class="mb-4 text-xs text-[var(--text-muted)]">最新一次复盘，满分 100</p>
         <RadarChart :data="averageScores" />
+        <dl class="sr-only">
+          <div v-for="(value, key) in averageScores" :key="key"><dt>{{ dimensionLabels[key] }}</dt><dd>{{ value }} 分</dd></div>
+        </dl>
       </div>
-      <div class="glass rounded-2xl p-5">
-        <h3 class="mb-4 text-base font-semibold">多维度趋势</h3>
+      <div class="surface rounded-[var(--radius-lg)] p-5" aria-label="历次面试表现趋势图">
+        <h2 class="mb-1 text-lg font-semibold">表现趋势</h2>
+        <p class="mb-4 text-xs text-[var(--text-muted)]">观察变化方向，不用一次分数定义结果</p>
         <TrendChart v-if="trendData.length" :data="trendData" :multi-dimension="trendData.length >= 2" />
         <div v-else class="flex h-80 items-center justify-center text-sm text-[var(--text-muted)]">
           暂无趋势数据
@@ -196,15 +216,14 @@ th{background:#f3f4f6;font-weight:600}
     </div>
     <div class="grid gap-4 lg:grid-cols-2">
       <div
-        v-for="(report, index) in reportsQuery.data.value"
+        v-for="report in reportsQuery.data.value"
         :key="report.id"
-        class="glass rounded-2xl p-5 animate-stagger"
-        :style="{ '--stagger-index': index }"
+        class="surface rounded-[var(--radius-lg)] p-5"
       >
         <div class="mb-3 flex items-start justify-between gap-3">
           <div>
             <h3 class="font-semibold">{{ report.title }}</h3>
-            <p class="text-xs text-[var(--text-muted)]">STAR Feedback 复盘</p>
+            <p class="text-xs text-[var(--text-muted)]">结构化回答复盘</p>
           </div>
           <Badge variant="accent" class="text-sm">{{ report.overall_score }} 分</Badge>
         </div>
@@ -212,7 +231,7 @@ th{background:#f3f4f6;font-weight:600}
         <p class="whitespace-pre-line text-sm leading-6 text-[var(--text-secondary)]">{{ report.content }}</p>
       </div>
 
-      <div v-if="!reportsQuery.data.value?.length" class="glass rounded-2xl p-6 text-center lg:col-span-2">
+      <div v-if="!reportsQuery.data.value?.length" class="surface-muted rounded-[var(--radius-lg)] p-8 text-center lg:col-span-2">
         <FileBarChart class="mx-auto mb-3 size-8 text-[var(--primary)]" />
         <h3 class="font-semibold">还没有报告</h3>
         <p class="mt-1 text-sm text-[var(--text-muted)]">完成至少一轮模拟面试后生成复盘报告</p>
@@ -220,15 +239,14 @@ th{background:#f3f4f6;font-weight:600}
     </div>
 
     <!-- 面试答案历史对比 -->
-    <div v-if="historyQuery.data.value?.length" class="glass rounded-2xl p-5">
+    <section v-if="historyQuery.data.value?.length" class="surface rounded-[var(--radius-lg)] p-5">
       <h3 class="mb-1 text-base font-semibold">答案历史对比</h3>
       <p class="mb-4 text-xs text-[var(--text-muted)]">查看你在不同面试中对同一题的回答和得分变化</p>
       <div class="flex flex-col gap-3">
         <div
-          v-for="(item, i) in historyQuery.data.value.slice(0, 10)"
+          v-for="item in historyQuery.data.value.slice(0, 10)"
           :key="item.turn_id"
-          class="glass-flat rounded-xl p-4 animate-stagger"
-          :style="{ '--stagger-index': i }"
+          class="surface-muted rounded-[var(--radius-md)] p-4"
         >
           <div class="mb-2 flex items-center justify-between">
             <span class="text-xs text-[var(--text-muted)]">{{ item.interview_title }} · {{ item.created_at?.slice(0, 10) }}</span>
@@ -239,6 +257,6 @@ th{background:#f3f4f6;font-weight:600}
           <p v-if="item.feedback_summary" class="mt-1 text-xs text-[var(--primary)]">{{ item.feedback_summary }}</p>
         </div>
       </div>
-    </div>
+    </section>
   </div>
 </template>

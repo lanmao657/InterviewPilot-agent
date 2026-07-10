@@ -17,18 +17,18 @@ const props = withDefaults(
 )
 
 const variantClasses: Record<GlassVariant, string> = {
-  default: 'glass',
-  elevated: 'glass-elevated',
-  flat: 'glass-flat',
+  default: 'surface',
+  elevated: 'surface-raised',
+  flat: 'surface-muted',
 }
 </script>
 
 <template>
   <section
     :class="cn(
-      'rounded-2xl p-0 transition-all duration-200',
+      'rounded-[var(--radius-lg)] p-0 transition-colors duration-150',
       variantClasses[variant],
-      hoverable && 'hover:-translate-y-0.5 hover:shadow-lg cursor-pointer',
+      hoverable && 'hover:border-[var(--border-strong)] cursor-pointer',
       $props.class,
     )"
   >

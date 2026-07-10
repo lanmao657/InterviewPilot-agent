@@ -28,7 +28,7 @@ const progress = computed(() => {
 </script>
 
 <template>
-  <div class="glass rounded-2xl p-5">
+  <div class="surface rounded-[var(--radius-lg)] p-5">
     <div class="mb-3 flex items-center justify-between">
       <p class="text-sm font-semibold">面试准备进度</p>
       <span class="text-xs text-[var(--text-muted)]">{{ progress }}% 完成</span>
@@ -37,7 +37,7 @@ const progress = computed(() => {
     <!-- 进度条 -->
     <div class="mb-4 h-1.5 overflow-hidden rounded-full bg-[var(--bg-input)]">
       <div
-        class="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--accent)] transition-all duration-500"
+        class="h-full rounded-full bg-[var(--primary)] transition-[width] duration-200"
         :style="{ width: `${progress}%` }"
       />
     </div>
@@ -51,7 +51,7 @@ const progress = computed(() => {
             ? 'text-[var(--success)] bg-[var(--success)]/10'
             : i === currentStepIndex
               ? 'text-[var(--primary)] bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/30 animate-pulse'
-              : 'text-[var(--text-muted)] hover:bg-[var(--glass-bg-hover)]'"
+              : 'text-[var(--text-muted)] hover:bg-[var(--surface-muted)]'"
           @click="router.push(step.path)"
         >
           <Check v-if="step.done" class="size-3" />

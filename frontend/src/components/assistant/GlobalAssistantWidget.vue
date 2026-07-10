@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bot, X } from 'lucide-vue-next'
+import { MessageCircleQuestion, X } from 'lucide-vue-next'
 import { ref } from 'vue'
 
 import AssistantChatPanel from '@/components/assistant/AssistantChatPanel.vue'
@@ -11,15 +11,15 @@ const open = ref(false)
 <template>
   <div class="fixed bottom-20 right-4 z-40 flex flex-col items-end gap-3 lg:bottom-5">
     <Transition name="scale">
-      <div v-if="open" class="glass-elevated h-[min(620px,calc(100vh-7rem))] w-[min(420px,calc(100vw-2rem))] rounded-2xl p-4">
+      <div v-if="open" class="surface-raised h-[min(620px,calc(100vh-7rem))] w-[min(420px,calc(100vw-2rem))] rounded-[var(--radius-lg)] p-4">
         <div class="mb-3 flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
-            <div class="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)] text-white">
-              <Bot class="size-4" />
+            <div class="grid size-9 place-items-center rounded-[var(--radius-sm)] bg-[var(--text-primary)] text-[var(--bg)]">
+              <MessageCircleQuestion class="size-4" />
             </div>
             <div>
-              <p class="text-sm font-semibold">InterviewPilot AI 助手</p>
-              <p class="text-xs text-[var(--text-muted)]">全局流式问答</p>
+              <p class="text-sm font-semibold">教练对话</p>
+              <p class="text-xs text-[var(--text-muted)]">结合当前准备进度</p>
             </div>
           </div>
           <Button variant="ghost" size="icon" @click="open = false">
@@ -31,8 +31,8 @@ const open = ref(false)
     </Transition>
 
     <Button size="lg" class="h-12 rounded-full px-5 shadow-lg" @click="open = !open">
-      <Bot class="size-5" />
-      AI 助手
+      <MessageCircleQuestion class="size-5" />
+      问教练
     </Button>
   </div>
 </template>

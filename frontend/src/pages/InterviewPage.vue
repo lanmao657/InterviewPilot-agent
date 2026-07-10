@@ -1,7 +1,7 @@
 <!-- frontend/src/pages/InterviewPage.vue -->
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { Bot, RefreshCw, RotateCcw, Send, Sparkles, Timer } from 'lucide-vue-next'
+import { MessageSquareText, RefreshCw, RotateCcw, Send, Timer } from 'lucide-vue-next'
 import { computed, onBeforeUnmount, ref } from 'vue'
 
 import { Badge } from '@/components/ui/badge'
@@ -177,12 +177,13 @@ onBeforeUnmount(() => stopTimer())
 </script>
 
 <template>
-  <div class="grid gap-5 xl:grid-cols-[1fr_360px]">
+  <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
     <!-- 主面试区 -->
-    <div class="glass rounded-2xl p-6">
+    <section class="surface-raised rounded-[var(--radius-lg)] p-5 sm:p-8">
       <div class="mb-5 flex items-start justify-between">
         <div>
-          <h2 class="text-lg font-semibold">模拟面试</h2>
+          <p class="eyebrow">回答训练</p>
+          <h2 class="mt-2 text-2xl font-semibold">模拟面试</h2>
           <p class="text-sm text-[var(--text-secondary)]">
             {{ mode === 'real' ? '真实模式：隐藏实时评分，模拟真实面试压力' : '练习模式：即时反馈，适合日常训练' }}
           </p>
@@ -255,10 +256,10 @@ onBeforeUnmount(() => stopTimer())
         </p>
 
         <!-- 面试官问题 -->
-        <div class="glass-elevated rounded-xl p-5">
+        <div class="rounded-[var(--radius-md)] border-l-4 border-[var(--primary)] bg-[var(--surface-muted)] p-5 sm:p-6">
           <div class="mb-2 flex items-center gap-2 text-sm font-semibold">
-            <Bot class="size-4 text-[var(--primary)]" />
-            面试官问题
+            <MessageSquareText class="size-4 text-[var(--primary)]" />
+            当前问题
             <span v-if="selectedQuestionId" class="text-xs font-normal text-[var(--text-muted)]">
               来自题库
             </span>
@@ -278,7 +279,7 @@ onBeforeUnmount(() => stopTimer())
         <!-- 操作按钮 -->
         <div class="flex flex-wrap gap-3">
           <Button :disabled="createMutation.isPending.value" @click="startInterview">
-            <Sparkles class="size-4" />
+            <MessageSquareText class="size-4" />
             {{ interview ? '重新开始' : '开始面试' }}
           </Button>
           <Button
@@ -298,12 +299,12 @@ onBeforeUnmount(() => stopTimer())
           </Button>
         </div>
       </div>
-    </div>
+    </section>
 
     <!-- 侧边栏 -->
     <aside class="flex flex-col gap-5">
       <!-- 题库选择 -->
-      <div class="glass rounded-2xl p-5">
+      <section class="surface rounded-[var(--radius-lg)] p-5">
         <div class="mb-3 flex items-center justify-between">
           <h3 class="text-base font-semibold">题库</h3>
           <Button variant="ghost" size="sm" @click="showQuestionBank = !showQuestionBank">
@@ -314,10 +315,10 @@ onBeforeUnmount(() => stopTimer())
           <button
             v-for="question in questionsQuery.data.value"
             :key="question.id"
-            class="rounded-lg p-3 text-left text-sm transition-all"
+            class="min-h-11 rounded-[var(--radius-sm)] border p-3 text-left text-sm transition-colors"
             :class="selectedQuestionId === question.id
-              ? 'glass-elevated ring-1 ring-[var(--primary)]'
-              : 'glass-flat hover:bg-[var(--glass-bg-hover)]'"
+              ? 'border-[var(--primary)] bg-[var(--primary)]/8 text-[var(--text-primary)]'
+              : 'border-[var(--border)] bg-[var(--surface-muted)] hover:border-[var(--border-strong)]'"
             @click="selectQuestion(question)"
           >
             <div class="mb-1 flex items-center gap-2">
@@ -332,13 +333,13 @@ onBeforeUnmount(() => stopTimer())
             还没有题目，请先在题库页生成。
           </p>
         </div>
-      </div>
+      </section>
 
       <!-- 追问（练习模式显示） -->
-      <div v-if="mode === 'practice'" class="glass rounded-2xl p-5">
+      <section v-if="mode === 'practice'" class="surface rounded-[var(--radius-lg)] p-5">
         <h3 class="mb-1 text-base font-semibold">追问</h3>
         <p class="mb-3 text-xs text-[var(--text-muted)]">
-          {{ streaming ? 'AI 正在生成...' : followUp ? '根据上一轮回答动态生成' : '提交回答后自动生成追问' }}
+          {{ streaming ? '正在整理追问...' : followUp ? '根据上一轮回答动态生成' : '提交回答后自动生成追问' }}
         </p>
         <p v-if="followUp" class="text-sm leading-6 text-[var(--text-secondary)]">{{ followUp }}</p>
         <div v-if="!streaming" class="mt-2 flex gap-2">
@@ -351,10 +352,10 @@ onBeforeUnmount(() => stopTimer())
             重新生成
           </Button>
         </div>
-      </div>
+      </section>
 
       <!-- 评分摘要（练习模式显示） -->
-      <div v-if="mode === 'practice'" class="glass rounded-2xl p-5">
+      <section v-if="mode === 'practice'" class="surface rounded-[var(--radius-lg)] p-5">
         <h3 class="mb-1 text-base font-semibold">评分摘要</h3>
         <p class="mb-3 text-xs text-[var(--text-muted)]">即时反馈会沉淀到报告</p>
         <Progress :value="score" class="mb-3" />
@@ -389,10 +390,10 @@ onBeforeUnmount(() => stopTimer())
         <p v-if="!latestTurn?.feedback?.dimensions" class="text-sm text-[var(--text-secondary)]">
           {{ latestTurn?.feedback?.summary ?? '提交第一段回答后查看 STAR Feedback。' }}
         </p>
-      </div>
+      </section>
 
       <!-- 真实模式：面试结束后显示完整回顾 -->
-      <div v-if="mode === 'real' && totalTimeUsed > 0" class="glass rounded-2xl p-5">
+      <section v-if="mode === 'real' && totalTimeUsed > 0" class="surface rounded-[var(--radius-lg)] p-5">
         <h3 class="mb-1 text-base font-semibold">面试回顾</h3>
         <p class="mb-3 text-xs text-[var(--text-muted)]">面试已结束，以下是你的表现总结</p>
         <div class="mb-3 flex items-center gap-3">
@@ -404,20 +405,20 @@ onBeforeUnmount(() => stopTimer())
           共回答 {{ answeredCount }} 题 ·
           平均每题 {{ answeredCount > 0 ? Math.round(totalTimeUsed / answeredCount) : 0 }} 秒
         </p>
-      </div>
+      </section>
 
       <!-- 最近问答 -->
-      <div class="glass rounded-2xl p-5">
+      <section class="surface rounded-[var(--radius-lg)] p-5">
         <h3 class="mb-3 text-base font-semibold">最近问答</h3>
         <div class="flex max-h-48 flex-col gap-3 overflow-y-auto">
-          <div v-for="turn in interview?.turns" :key="turn.id" class="glass-flat rounded-lg p-3">
+          <div v-for="turn in interview?.turns" :key="turn.id" class="surface-muted rounded-[var(--radius-sm)] p-3">
             <p class="text-sm font-medium">{{ turn.question }}</p>
             <p v-if="mode === 'practice' || totalTimeUsed > 0" class="mt-1 text-xs text-[var(--text-muted)]">得分 {{ turn.score }}</p>
             <p v-else class="mt-1 text-xs text-[var(--text-muted)]">已回答</p>
           </div>
           <p v-if="!interview?.turns.length" class="text-sm text-[var(--text-muted)]">还没有提交回答。</p>
         </div>
-      </div>
+      </section>
     </aside>
   </div>
 </template>

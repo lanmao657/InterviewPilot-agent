@@ -37,11 +37,11 @@ const isDark = computed(() => theme.resolved === 'dark')
 
 // 多维度配色
 const dimColors = {
-  overall: { light: '#3b82f6', dark: '#60a5fa' },
-  clarity: { light: '#8b5cf6', dark: '#a78bfa' },
-  structure: { light: '#10b981', dark: '#34d399' },
-  evidence: { light: '#f59e0b', dark: '#fbbf24' },
-  reflection: { light: '#ef4444', dark: '#f87171' },
+  overall: { light: '#9f432f', dark: '#f08b70' },
+  clarity: { light: '#32675f', dark: '#78b9ae' },
+  structure: { light: '#5e6d3c', dark: '#a9bd78' },
+  evidence: { light: '#946313', dark: '#e3b66b' },
+  reflection: { light: '#5c5a78', dark: '#aaa7d1' },
 }
 
 const dimLabels: Record<string, string> = {
@@ -53,11 +53,11 @@ const dimLabels: Record<string, string> = {
 }
 
 const colors = computed(() => ({
-  text: isDark.value ? '#f1f5f9' : '#1e293b',
-  textSecondary: isDark.value ? '#94a3b8' : '#64748b',
-  splitLine: isDark.value ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
-  tooltipBg: isDark.value ? 'rgba(30, 41, 59, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-  tooltipBorder: isDark.value ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
+  text: isDark.value ? '#f2ede5' : '#292621',
+  textSecondary: isDark.value ? '#c1b9ad' : '#5f5a52',
+  splitLine: isDark.value ? '#443e36' : '#d8d0c4',
+  tooltipBg: isDark.value ? '#2b2722' : '#ffffff',
+  tooltipBorder: isDark.value ? '#5b5348' : '#d8d0c4',
 }))
 
 function getColor(dim: string): string {
@@ -78,21 +78,11 @@ function updateChart() {
     name: dimLabels[dim] ?? dim,
     data: props.data.map((item) => (item as unknown as Record<string, number>)[dim] ?? 0),
     type: 'line' as const,
-    smooth: true,
+    smooth: false,
     lineStyle: { color: getColor(dim), width: dim === 'overall' ? 3 : 2 },
     itemStyle: { color: getColor(dim) },
     symbol: 'circle',
     symbolSize: dim === 'overall' ? 8 : 5,
-    ...(dim === 'overall' && !props.multiDimension
-      ? {
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: `${getColor(dim)}80` },
-              { offset: 1, color: `${getColor(dim)}15` },
-            ]),
-          },
-        }
-      : {}),
   }))
 
   const option = {

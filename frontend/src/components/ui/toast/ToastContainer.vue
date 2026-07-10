@@ -22,17 +22,25 @@ const colorMap: Record<ToastType, string> = {
 </script>
 
 <template>
-  <div class="fixed right-4 top-4 z-[200] flex flex-col gap-2 pointer-events-none">
+  <div
+    class="pointer-events-none fixed right-4 top-4 z-[200] flex flex-col gap-2"
+    aria-live="polite"
+    aria-atomic="false"
+  >
     <TransitionGroup name="toast">
       <div
         v-for="t in toast.toasts"
         :key="t.id"
-        class="pointer-events-auto glass-elevated flex items-center gap-3 rounded-xl px-4 py-3 shadow-lg min-w-64 max-w-sm"
+        class="surface-raised pointer-events-auto flex min-w-64 max-w-sm items-center gap-3 rounded-[var(--radius-md)] px-4 py-3 shadow-lg"
         :style="{ borderLeft: `3px solid ${colorMap[t.type]}` }"
       >
         <component :is="iconMap[t.type]" class="size-4 shrink-0" :style="{ color: colorMap[t.type] }" />
         <p class="flex-1 text-sm">{{ t.message }}</p>
-        <button class="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors" @click="toast.dismiss(t.id)">
+        <button
+          class="focus-ring grid size-11 shrink-0 place-items-center rounded-[var(--radius-sm)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+          aria-label="关闭通知"
+          @click="toast.dismiss(t.id)"
+        >
           <X class="size-3.5" />
         </button>
       </div>

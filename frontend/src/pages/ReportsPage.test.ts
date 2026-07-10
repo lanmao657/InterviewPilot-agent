@@ -87,4 +87,23 @@ describe('ReportsPage PDF export', () => {
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;')
     expect(print).toHaveBeenCalled()
   })
+
+  it('leads with an actionable conclusion from the weakest score', async () => {
+    mocks.reports.mockResolvedValue([
+      {
+        id: 1,
+        interview_id: 1,
+        title: '前端模拟面试复盘',
+        overall_score: 76,
+        content: '继续练习',
+        metrics: { clarity: 82, structure: 78, evidence: 61, reflection: 74 },
+        created_at: '2026-07-06T00:00:00Z',
+      },
+    ])
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="report-insight"]').text()).toContain('下一轮优先补强证据充分度')
+  })
 })

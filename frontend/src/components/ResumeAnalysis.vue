@@ -64,7 +64,7 @@ const barColors = ['var(--error)', 'var(--warning)', 'var(--accent)', 'var(--suc
     </div>
 
     <!-- 柱状图可视化 -->
-    <div v-if="data.modules?.length" class="rounded-xl glass-flat p-4">
+    <div v-if="data.modules?.length" class="surface-muted rounded-[var(--radius-md)] p-4">
       <p class="mb-3 text-sm font-semibold text-[var(--text-secondary)]">各模块评分对比</p>
       <div class="flex items-end gap-3" style="height: 120px;">
         <div

@@ -76,4 +76,18 @@ describe('QuestionsPage', () => {
 
     expect(wrapper.text()).toContain('AI 服务暂时不可用，已使用本地示例结果。')
   })
+
+  it('filters the visible question list by difficulty', async () => {
+    mocks.questions.mockResolvedValue([
+      { id: 1, category: '项目深挖', difficulty: 'easy', prompt: '简单题', rubric: {} },
+      { id: 2, category: '系统设计', difficulty: 'hard', prompt: '困难题', rubric: {} },
+    ])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="difficulty-filter"]').setValue('hard')
+
+    expect(wrapper.text()).toContain('困难题')
+    expect(wrapper.text()).not.toContain('简单题')
+  })
 })
