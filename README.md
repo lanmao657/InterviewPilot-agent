@@ -89,6 +89,14 @@ ECharts 驱动的雷达图与趋势图，直观展示能力维度分布和分数
 
 ---
 
+## 开发文档
+
+有关系统架构、RAG Pipeline、前后端实现、数据模型、API、测试、部署和技术面试讲解，请参阅：
+
+- [InterviewPilot 开发与技术说明](docs/DEVELOPMENT.md)
+
+---
+
 ## 快速开始
 
 ### 方式一：Docker Compose（推荐）
