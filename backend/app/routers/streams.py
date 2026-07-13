@@ -54,10 +54,16 @@ async def _stream_with_heartbeat(content_generator):
         content_task.cancel()
 
 
+def _format_sse_event(data: str, event: str | None = None) -> str:
+    event_line = f"event: {event}\n" if event else ""
+    data_lines = "".join(f"data: {line}\n" for line in data.split("\n"))
+    return f"{event_line}{data_lines}\n"
+
+
 async def _sse_text(system: str, prompt: str):
     async for chunk in AIAgent().stream_chat(system, prompt):
-        yield f"data: {chunk}\n\n"
-    yield "event: done\ndata: [DONE]\n\n"
+        yield _format_sse_event(chunk)
+    yield _format_sse_event("[DONE]", "done")
 
 
 async def _sse_assistant_persisted(
@@ -71,9 +77,9 @@ async def _sse_assistant_persisted(
     try:
         async for chunk in AIAgent().stream_coach_with_context(message, context):
             content += chunk
-            yield f"data: {chunk}\n\n"
+            yield _format_sse_event(chunk)
         finish_message(db, conversation, assistant_message, content, "done")
-        yield "event: done\ndata: [DONE]\n\n"
+        yield _format_sse_event("[DONE]", "done")
     except asyncio.CancelledError:
         status = "done" if content else "error"
         finish_message(db, conversation, assistant_message, content or "助手回复已中断。", status)
@@ -82,8 +88,8 @@ async def _sse_assistant_persisted(
         fallback = "助手暂时无法回答，请稍后重试。"
         content = content or fallback
         finish_message(db, conversation, assistant_message, content, "error")
-        yield f"event: error\ndata: {str(exc)}\n\n"
-        yield "event: done\ndata: [DONE]\n\n"
+        yield _format_sse_event(fallback, "error")
+        yield _format_sse_event("[DONE]", "done")
 
 
 @router.get("/assistant/chat")

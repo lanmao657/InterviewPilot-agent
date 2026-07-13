@@ -18,7 +18,7 @@ defineProps<{ cards: CardData[] }>()
     <div
       v-for="(card, i) in cards"
       :key="i"
-      class="glass-flat rounded-xl p-5 break-inside-avoid"
+      class="surface-muted break-inside-avoid rounded-[var(--radius-md)] p-5"
     >
       <!-- 题目 -->
       <div class="mb-3 flex items-start gap-2">

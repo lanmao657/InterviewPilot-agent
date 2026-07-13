@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from app.services.ai_agent import AIAgent
 
 
@@ -46,3 +46,43 @@ async def test_score_answer_returns_structured(ai_agent):
         assert result["score"] == 85
         assert "dimensions" in result
         assert len(result["dimensions"]) == 4
+
+
+@pytest.mark.asyncio
+async def test_generate_questions_falls_back_when_retrieval_fails():
+    retrieval = AsyncMock()
+    retrieval.search.side_effect = RuntimeError("vector backend unavailable")
+    agent = AIAgent(retrieval)
+    agent.settings.ai_api_key = None
+
+    questions = await agent.generate_questions("项目深挖", 2, user_id=1)
+
+    assert len(questions) == 2
+    assert questions[0]["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_score_answer_falls_back_when_retrieval_fails():
+    retrieval = AsyncMock()
+    retrieval.search.side_effect = RuntimeError("vector backend unavailable")
+    agent = AIAgent(retrieval)
+    agent.settings.ai_api_key = None
+
+    result = await agent.score_answer("测试问题", "测试回答", user_id=1)
+
+    assert result["score"] == 70
+    assert result["summary"]
+
+
+@pytest.mark.asyncio
+async def test_report_marks_local_fallback_when_ai_key_missing():
+    agent = AIAgent()
+    agent.settings.ai_api_key = None
+
+    result = await agent.build_report(
+        "模拟面试",
+        [{"question": "问题", "answer": "回答", "score": 70}],
+        user_id=1,
+    )
+
+    assert result["_ai_notice"] == "未配置 AI 服务，当前使用本地模拟结果。"

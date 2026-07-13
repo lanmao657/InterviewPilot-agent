@@ -38,7 +38,7 @@ const severityLabels: Record<string, string> = {
 <template>
   <div class="flex flex-col gap-4">
     <!-- 匹配总览 -->
-    <div class="flex items-center gap-3 rounded-xl glass-flat p-3">
+    <div class="surface-muted flex items-center gap-3 rounded-[var(--radius-md)] p-3">
       <div class="flex items-center gap-4 text-sm">
         <span class="flex items-center gap-1 text-[var(--success)]">
           <CheckCircle class="size-4" /> 已覆盖 {{ data.matched?.length ?? 0 }}
@@ -58,7 +58,7 @@ const severityLabels: Record<string, string> = {
         <CheckCircle class="size-4" />
         已覆盖的 JD 要求
       </p>
-      <div v-for="(item, i) in data.matched" :key="i" class="rounded-lg glass-flat p-3">
+      <div v-for="(item, i) in data.matched" :key="i" class="surface-muted rounded-[var(--radius-sm)] p-3">
         <p class="text-sm font-medium">{{ item.requirement }}</p>
         <p class="mt-1 text-xs text-[var(--text-muted)]">简历证据：{{ item.evidence }}</p>
       </div>
@@ -70,7 +70,7 @@ const severityLabels: Record<string, string> = {
         <AlertTriangle class="size-4" />
         需要弥补的差距
       </p>
-      <div v-for="(item, i) in data.gaps" :key="i" class="rounded-lg glass-flat p-3">
+      <div v-for="(item, i) in data.gaps" :key="i" class="surface-muted rounded-[var(--radius-sm)] p-3">
         <div class="mb-1 flex items-center gap-2">
           <span
             class="rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"

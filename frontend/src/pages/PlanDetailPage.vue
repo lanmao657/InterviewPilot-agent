@@ -63,15 +63,16 @@ function formatDate(dateStr: string) {
 </script>
 
 <template>
-  <div class="flex flex-col gap-6">
+  <div class="flex flex-col gap-8">
     <!-- 返回导航 + 标题区 -->
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div class="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex items-center gap-3">
         <Button variant="ghost" size="sm" @click="router.back()">
           <ArrowLeft class="size-4" />
         </Button>
         <div>
-          <h1 class="text-xl font-bold">{{ plan?.title ?? '准备计划' }}</h1>
+          <p class="eyebrow">准备路线</p>
+          <h2 class="mt-1 text-2xl font-semibold">{{ plan?.title ?? '准备计划' }}</h2>
           <p class="text-sm text-[var(--text-muted)]">
             {{ plan?.target_role }} · {{ plan ? formatDate(plan.created_at) : '' }}
           </p>
@@ -79,7 +80,7 @@ function formatDate(dateStr: string) {
       </div>
       <div class="flex gap-2">
         <Button variant="secondary" size="sm" @click="router.push('/questions')">
-          生成题库
+          生成针对性题目
           <ArrowRight class="size-3" />
         </Button>
         <Button size="sm" @click="router.push('/interview')">
@@ -89,35 +90,27 @@ function formatDate(dateStr: string) {
       </div>
     </div>
 
-    <!-- Fit Score 环形展示区 -->
-    <div class="glass-elevated rounded-2xl p-6">
-      <div class="grid gap-6 sm:grid-cols-[auto_1fr] sm:items-center">
-        <!-- 环形进度 -->
-        <div class="flex flex-col items-center gap-2">
-          <div class="score-ring" :style="{ '--score': fitScore, '--ring-color': fitLevel.color }">
-            <span class="score-ring__value">{{ fitScore }}</span>
-            <span class="score-ring__label">Fit Score</span>
-          </div>
-          <Badge :style="{ background: fitLevel.color, color: '#fff' }" class="text-xs">
-            <component :is="fitLevel.icon" class="size-3" />
-            {{ fitLevel.label }}
-          </Badge>
-        </div>
-
-        <!-- AI 总结 -->
-        <div>
-          <div class="mb-3 flex items-center gap-2">
-            <Lightbulb class="size-4 text-[var(--primary)]" />
-            <h3 class="text-sm font-semibold">AI 匹配分析</h3>
-          </div>
-          <p class="text-sm leading-6 text-[var(--text-secondary)]">{{ summary || '暂无分析' }}</p>
-          <Progress :value="fitScore" class="mt-4" />
-        </div>
+    <section class="surface-raised grid overflow-hidden rounded-[var(--radius-lg)] sm:grid-cols-[180px_1fr]">
+      <div class="flex flex-col justify-center bg-[var(--surface-muted)] p-6 sm:border-r sm:border-[var(--border)] sm:p-8">
+        <span class="font-mono text-5xl font-semibold tabular-nums">{{ fitScore }}</span>
+        <span class="mt-1 text-xs font-bold tracking-[0.12em] text-[var(--text-muted)]">岗位匹配度 / 100</span>
+        <Badge :style="{ borderColor: fitLevel.color, color: fitLevel.color }" variant="outline" class="mt-4 self-start">
+          <component :is="fitLevel.icon" class="size-3" />
+          {{ fitLevel.label }}
+        </Badge>
       </div>
-    </div>
+      <div class="p-6 sm:p-8">
+        <div class="mb-3 flex items-center gap-2">
+          <Lightbulb class="size-4 text-[var(--primary)]" />
+          <h3 class="text-lg font-semibold">岗位匹配结论</h3>
+        </div>
+        <p class="max-w-3xl text-sm leading-7 text-[var(--text-secondary)]">{{ summary || '暂无分析' }}</p>
+        <Progress :value="fitScore" class="mt-5" />
+      </div>
+    </section>
 
     <!-- 准备路线（里程碑） -->
-    <div class="glass rounded-2xl p-6">
+    <section class="surface rounded-[var(--radius-lg)] p-6 sm:p-8">
       <div class="mb-5 flex items-center gap-2">
         <Layers class="size-5 text-[var(--primary)]" />
         <h2 class="text-lg font-semibold">准备路线</h2>
@@ -129,8 +122,7 @@ function formatDate(dateStr: string) {
         <div
           v-for="(step, i) in milestones"
           :key="i"
-          class="timeline__item animate-stagger"
-          :style="{ '--stagger-index': i }"
+          class="timeline__item"
         >
           <div class="timeline__connector">
             <div class="timeline__dot" :class="{ 'timeline__dot--active': i === 0 }">
@@ -146,12 +138,12 @@ function formatDate(dateStr: string) {
           </div>
         </div>
       </div>
-    </div>
+    </section>
 
     <!-- 焦点 + 优势 + 差距 三栏 -->
     <div class="grid gap-4 lg:grid-cols-3">
       <!-- 重点方向 -->
-      <div class="glass rounded-2xl p-5">
+      <section class="surface rounded-[var(--radius-lg)] p-5">
         <div class="mb-4 flex items-center gap-2">
           <Target class="size-4 text-[var(--primary)]" />
           <h3 class="text-sm font-semibold">重点方向</h3>
@@ -160,8 +152,7 @@ function formatDate(dateStr: string) {
           <div
             v-for="(area, i) in focusAreas"
             :key="i"
-            class="focus-card glass-flat rounded-xl p-3 animate-stagger"
-            :style="{ '--stagger-index': i }"
+            class="focus-card rounded-[var(--radius-md)] border border-[var(--border)] p-3"
           >
             <div class="flex items-center gap-2">
               <span
@@ -174,10 +165,10 @@ function formatDate(dateStr: string) {
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
       <!-- 你的优势 -->
-      <div class="glass rounded-2xl p-5">
+      <section class="surface rounded-[var(--radius-lg)] p-5">
         <div class="mb-4 flex items-center gap-2">
           <Star class="size-4 text-[var(--success)]" />
           <h3 class="text-sm font-semibold">你的优势</h3>
@@ -186,8 +177,7 @@ function formatDate(dateStr: string) {
           <div
             v-for="(s, i) in strengths"
             :key="i"
-            class="strength-card glass-flat rounded-xl p-3 animate-stagger"
-            :style="{ '--stagger-index': i }"
+            class="strength-card rounded-[var(--radius-md)] border border-[var(--border)] p-3"
           >
             <div class="flex items-start gap-2">
               <CheckCircle2 class="mt-0.5 size-4 shrink-0 text-[var(--success)]" />
@@ -196,10 +186,10 @@ function formatDate(dateStr: string) {
           </div>
         </div>
         <p v-else class="text-xs text-[var(--text-muted)]">上传简历后可自动分析优势</p>
-      </div>
+      </section>
 
       <!-- 差距 / 待提升 -->
-      <div class="glass rounded-2xl p-5">
+      <section class="surface rounded-[var(--radius-lg)] p-5">
         <div class="mb-4 flex items-center gap-2">
           <ShieldAlert class="size-4 text-[var(--warning)]" />
           <h3 class="text-sm font-semibold">待提升</h3>
@@ -208,8 +198,7 @@ function formatDate(dateStr: string) {
           <div
             v-for="(g, i) in gaps"
             :key="i"
-            class="gap-card glass-flat rounded-xl p-3 animate-stagger"
-            :style="{ '--stagger-index': i }"
+            class="gap-card rounded-[var(--radius-md)] border border-[var(--border)] p-3"
           >
             <div class="flex items-start gap-2">
               <ChevronRight class="mt-0.5 size-4 shrink-0 text-[var(--warning)]" />
@@ -218,11 +207,11 @@ function formatDate(dateStr: string) {
           </div>
         </div>
         <p v-else class="text-xs text-[var(--text-muted)]">暂无差距分析</p>
-      </div>
+      </section>
     </div>
 
     <!-- 关键词标签云 -->
-    <div v-if="keywords.length" class="glass rounded-2xl p-6">
+    <section v-if="keywords.length" class="surface rounded-[var(--radius-lg)] p-6">
       <div class="mb-4 flex items-center gap-2">
         <BookOpen class="size-5 text-[var(--primary)]" />
         <h2 class="text-lg font-semibold">岗位关键词</h2>
@@ -238,7 +227,7 @@ function formatDate(dateStr: string) {
           {{ kw.keyword }}
         </span>
       </div>
-    </div>
+    </section>
   </div>
 </template>
 
@@ -364,11 +353,9 @@ function formatDate(dateStr: string) {
   padding: 0.25rem 0 1.5rem;
 }
 
-/* ─── 焦点卡片悬停 ─── */
 .focus-card:hover {
   border-color: var(--primary);
-  transform: translateX(4px);
-  transition: all 0.2s ease;
+  transition: border-color var(--duration-fast) ease;
 }
 
 .strength-card:hover {
@@ -386,20 +373,19 @@ function formatDate(dateStr: string) {
   display: inline-flex;
   align-items: center;
   padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
+  border-radius: var(--radius-sm);
   font-size: 0.75rem;
   font-weight: 500;
   background: var(--bg-input);
   color: var(--text-secondary);
   border: 1px solid transparent;
-  transition: all 0.2s ease;
+  transition: border-color var(--duration-fast) ease, color var(--duration-fast) ease;
 }
 
 .keyword-pill:hover {
   border-color: var(--primary);
   color: var(--primary);
   background: color-mix(in srgb, var(--primary) 8%, transparent);
-  transform: translateY(-1px);
 }
 
 .keyword-pill--high {

@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { BadgeCheck, ChevronDown, ChevronUp, ClipboardPaste, Eye, FileText, Loader2, Sparkles, Stethoscope, Trash2, Upload } from 'lucide-vue-next'
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import ResumeAnalysis from '@/components/ResumeAnalysis.vue'
@@ -22,6 +22,7 @@ const jdFile = ref<File | null>(null)
 const jdText = ref('')
 const jdTab = ref<'file' | 'text'>('file')
 const message = ref('')
+const planNotices = ref<string[]>([])
 const planProgress = ref({ fit_score: false, keywords: false, roadmap: false })
 const resumeInputRef = ref<HTMLInputElement | null>(null)
 const jdInputRef = ref<HTMLInputElement | null>(null)
@@ -35,11 +36,36 @@ const analyzingId = ref<number | null>(null)
 
 const resumes = computed(() => documentsQuery.data.value?.filter((item) => item.kind === 'resume') ?? [])
 const jds = computed(() => documentsQuery.data.value?.filter((item) => item.kind === 'job_description') ?? [])
+const hasIndexingDocuments = computed(() =>
+  documentsQuery.data.value?.some((item) => isEmbeddingBusy(item)) ?? false,
+)
+
+let documentsPollTimer: ReturnType<typeof setInterval> | null = null
+
+watch(
+  hasIndexingDocuments,
+  (active) => {
+    if (documentsPollTimer) {
+      clearInterval(documentsPollTimer)
+      documentsPollTimer = null
+    }
+    if (active) {
+      documentsPollTimer = setInterval(() => {
+        documentsQuery.refetch()
+      }, 3000)
+    }
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  if (documentsPollTimer) clearInterval(documentsPollTimer)
+})
 
 const uploadMutation = useMutation({
   mutationFn: ({ kind, file }: { kind: 'resume' | 'job-description'; file: File }) => api.uploadDocument(kind, file),
   onSuccess: () => {
-    message.value = '上传并解析成功'
+    message.value = '上传成功，正在建立语义索引'
     queryClient.invalidateQueries({ queryKey: ['documents'] })
   },
   onError: (err: Error) => {
@@ -92,7 +118,7 @@ const jdTextMutation = useMutation({
   mutationFn: (text: string) => api.uploadJDText(text),
   onSuccess: () => {
     jdText.value = ''
-    message.value = 'JD 文本上传并解析成功'
+    message.value = 'JD 文本上传成功，正在建立语义索引'
     queryClient.invalidateQueries({ queryKey: ['documents'] })
   },
   onError: (err: Error) => {
@@ -102,6 +128,19 @@ const jdTextMutation = useMutation({
 
 const planMutation = useMutation({
   mutationFn: async () => {
+    const selectedDocuments = [resumes.value[0], jds.value[0]].filter(Boolean) as DocumentItem[]
+    const busyDocument = selectedDocuments.find((doc) => isEmbeddingBusy(doc))
+    if (busyDocument) {
+      message.value = '文档语义索引仍在建立中，请稍后再试'
+      throw new Error('文档语义索引仍在建立中，请稍后再试')
+    }
+    const failedDocument = selectedDocuments.find((doc) => doc.embedding_status === 'failed')
+    if (failedDocument) {
+      const errorMessage = failedDocument.embedding_error || '文档语义索引建立失败，请重新上传或稍后重试'
+      message.value = errorMessage
+      throw new Error(errorMessage)
+    }
+    planNotices.value = []
     planProgress.value = { fit_score: false, keywords: false, roadmap: false }
     return api.createPlanStream(
       {
@@ -110,9 +149,17 @@ const planMutation = useMutation({
         title: `${targetRole.value} 面试准备计划`,
         target_role: targetRole.value,
       },
-      (event) => {
+      (event, data) => {
         if (event in planProgress.value) {
           planProgress.value[event as keyof typeof planProgress.value] = true
+        }
+        if (event === 'notice') {
+          const notice = data && typeof data === 'object' && 'message' in data
+            ? String((data as { message?: unknown }).message ?? '')
+            : ''
+          if (notice && !planNotices.value.includes(notice)) {
+            planNotices.value.push(notice)
+          }
         }
       },
     )
@@ -122,7 +169,8 @@ const planMutation = useMutation({
     planProgress.value = { fit_score: false, keywords: false, roadmap: false }
     queryClient.invalidateQueries({ queryKey: ['plans'] })
   },
-  onError: () => {
+  onError: (err: Error) => {
+    message.value = err.message
     planProgress.value = { fit_score: false, keywords: false, roadmap: false }
   },
 })
@@ -152,6 +200,20 @@ function preview(doc: DocumentItem) {
   return String(doc.summary.preview ?? '').slice(0, 120)
 }
 
+function isEmbeddingBusy(doc: DocumentItem) {
+  return doc.embedding_status === 'pending' || doc.embedding_status === 'processing'
+}
+
+function embeddingBadge(doc: DocumentItem): { label: string; variant: 'success' | 'warning' | 'error' } {
+  if (doc.embedding_status === 'ready') {
+    return { label: doc.chunk_count > 0 ? `可检索 ${doc.chunk_count}` : '可检索', variant: 'success' }
+  }
+  if (doc.embedding_status === 'failed') {
+    return { label: '索引失败', variant: 'error' }
+  }
+  return { label: '建立中', variant: 'warning' }
+}
+
 function toggleExpand(docId: number) {
   expandedDocId.value = expandedDocId.value === docId ? null : docId
 }
@@ -172,11 +234,12 @@ function formatTime(dateStr: string) {
 </script>
 
 <template>
-  <div class="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+  <div class="grid items-start gap-6 xl:grid-cols-[0.82fr_1.18fr]">
     <!-- 上传区域 -->
-    <div class="glass rounded-2xl p-6">
-      <h2 class="text-lg font-semibold">简历与 JD</h2>
-      <p class="mb-5 text-sm text-[var(--text-secondary)]">上传材料后生成岗位匹配准备计划</p>
+    <section class="surface rounded-[var(--radius-lg)] p-6 xl:sticky xl:top-28">
+      <p class="eyebrow">准备材料</p>
+      <h2 class="mt-2 text-2xl font-semibold">建立材料底稿</h2>
+      <p class="mb-6 mt-2 text-sm leading-6 text-[var(--text-secondary)]">简历和岗位描述齐全后，再生成有优先级的准备路线。</p>
 
       <div class="flex flex-col gap-5">
         <label class="flex flex-col gap-2 text-sm font-medium">
@@ -184,7 +247,7 @@ function formatTime(dateStr: string) {
           <Input v-model="targetRole" />
         </label>
 
-        <div class="glass-flat rounded-xl p-4">
+        <div class="surface-muted rounded-[var(--radius-md)] p-4">
           <p class="mb-3 text-sm font-semibold">简历</p>
           <input
             ref="resumeInputRef"
@@ -204,7 +267,7 @@ function formatTime(dateStr: string) {
           </Button>
         </div>
 
-        <div class="glass-flat rounded-xl p-4">
+        <div class="surface-muted rounded-[var(--radius-md)] p-4">
           <div class="mb-3 flex items-center justify-between">
             <p class="text-sm font-semibold">职位 JD</p>
             <div class="flex rounded-lg bg-[var(--bg-input)] p-0.5">
@@ -286,16 +349,22 @@ function formatTime(dateStr: string) {
             <span :class="planProgress.roadmap ? 'text-[var(--success)]' : 'text-[var(--text-muted)]'">路线图生成</span>
           </div>
         </div>
-        <p v-if="message" class="text-sm" :class="message.includes('失败') ? 'text-[var(--error)]' : 'text-[var(--primary)]'">
+        <p v-if="message" class="rounded-[var(--radius-sm)] border border-[var(--border)] px-3 py-2 text-sm" :class="message.includes('失败') ? 'bg-[var(--error-light)] text-[var(--error)]' : 'bg-[var(--info-light)] text-[var(--info)]'" role="status">
           {{ message }}
         </p>
+        <div v-if="planNotices.length" class="flex flex-col gap-1 text-xs text-[var(--warning)]">
+          <p v-for="notice in planNotices" :key="notice">{{ notice }}</p>
+        </div>
       </div>
-    </div>
+    </section>
 
     <!-- 资料库 -->
-    <div class="glass rounded-2xl p-6">
-      <h2 class="text-lg font-semibold">资料库</h2>
-      <p class="mb-5 text-sm text-[var(--text-secondary)]">最新计划数：{{ plansQuery.data.value?.length ?? 0 }}</p>
+    <section class="surface rounded-[var(--radius-lg)] p-6 sm:p-8">
+      <div class="mb-6 border-b border-[var(--border)] pb-5">
+        <p class="eyebrow">材料工作区</p>
+        <h2 class="mt-2 text-2xl font-semibold">资料与准备计划</h2>
+        <p class="mt-2 text-sm text-[var(--text-secondary)]">{{ documentsQuery.data.value?.length ?? 0 }} 份材料 · {{ plansQuery.data.value?.length ?? 0 }} 份计划</p>
+      </div>
 
       <!-- 准备计划列表 -->
       <div v-if="plansQuery.data.value?.length" class="mb-4 flex flex-col gap-2">
@@ -303,8 +372,11 @@ function formatTime(dateStr: string) {
         <div
           v-for="plan in plansQuery.data.value"
           :key="plan.id"
-          class="glass-flat rounded-xl p-3 flex items-center justify-between gap-2 cursor-pointer transition-all duration-200 hover:border-[var(--primary)] hover:translate-x-1"
+          class="focus-ring surface-muted flex min-h-14 cursor-pointer items-center justify-between gap-2 rounded-[var(--radius-md)] p-3 transition-colors hover:border-[var(--primary)]"
+          role="link"
+          tabindex="0"
           @click="router.push(`/plans/${plan.id}`)"
+          @keydown.enter="router.push(`/plans/${plan.id}`)"
         >
           <div class="flex items-center gap-2 min-w-0">
             <FileText class="size-4 shrink-0 text-[var(--primary)]" />
@@ -319,10 +391,9 @@ function formatTime(dateStr: string) {
 
       <div class="flex flex-col gap-3">
         <div
-          v-for="(doc, index) in documentsQuery.data.value"
+          v-for="doc in documentsQuery.data.value"
           :key="doc.id"
-          class="glass-flat rounded-xl p-4 animate-stagger"
-          :style="{ '--stagger-index': index }"
+          class="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-raised)] p-4"
         >
           <!-- 文档头部信息 -->
           <div class="flex items-center justify-between gap-3">
@@ -334,6 +405,9 @@ function formatTime(dateStr: string) {
               <Badge :variant="doc.kind === 'resume' ? 'default' : 'accent'">
                 {{ doc.kind === 'resume' ? '简历' : 'JD' }}
               </Badge>
+              <Badge :variant="embeddingBadge(doc).variant">
+                {{ embeddingBadge(doc).label }}
+              </Badge>
               <span class="text-xs text-[var(--text-muted)]">{{ formatTime(doc.created_at) }}</span>
             </div>
           </div>
@@ -341,6 +415,9 @@ function formatTime(dateStr: string) {
           <!-- 预览文本 -->
           <p class="mt-2 text-sm text-[var(--text-muted)]">
             {{ expandedDocId === doc.id ? String(doc.summary.preview ?? '') : preview(doc) }}
+          </p>
+          <p v-if="doc.embedding_status === 'failed' && doc.embedding_error" class="mt-1 text-xs text-[var(--error)]">
+            {{ doc.embedding_error }}
           </p>
 
           <!-- 操作按钮 -->
@@ -361,7 +438,7 @@ function formatTime(dateStr: string) {
             >
               <Loader2 v-if="analyzeMutation.isPending.value && analyzingId === doc.id" class="size-3 animate-spin" />
               <Stethoscope v-else class="size-3" />
-              {{ doc.analysis ? '重新诊断' : 'AI 诊断' }}
+              {{ doc.analysis ? '重新诊断' : '材料诊断' }}
             </Button>
 
             <!-- 简历优化按钮（仅简历类型显示） -->
@@ -392,12 +469,12 @@ function formatTime(dateStr: string) {
           </div>
 
           <!-- 简历诊断结果展示 -->
-          <div v-if="doc.analysis && doc.kind === 'resume'" class="mt-4 rounded-xl glass p-4">
+          <div v-if="doc.analysis && doc.kind === 'resume'" class="surface mt-4 rounded-[var(--radius-md)] p-4">
             <ResumeAnalysis :data="doc.analysis as any" />
           </div>
 
           <!-- 简历优化结果展示 -->
-          <div v-if="rewriteData && rewriteDocId === doc.id && doc.kind === 'resume'" class="mt-4 rounded-xl glass p-4">
+          <div v-if="rewriteData && rewriteDocId === doc.id && doc.kind === 'resume'" class="surface mt-4 rounded-[var(--radius-md)] p-4">
             <p class="mb-2 text-sm font-semibold text-[var(--text-secondary)]">简历优化建议</p>
             <p class="mb-3 text-xs text-[var(--text-muted)]">{{ String(rewriteData.overall_suggestion ?? '') }}</p>
             <div v-if="(rewriteData.ats_score_estimate as number) > 0" class="mb-3 flex items-center gap-2">
@@ -412,15 +489,18 @@ function formatTime(dateStr: string) {
                 </span>
               </div>
             </div>
-            <div v-for="(rw, i) in (rewriteData.rewrites as Array<Record<string, string>>)" :key="i" class="mb-3 rounded-lg glass-flat p-3">
+            <div v-for="(rw, i) in (rewriteData.rewrites as Array<Record<string, string>>)" :key="i" class="surface-muted mb-3 rounded-[var(--radius-sm)] p-3">
               <p class="text-xs text-[var(--text-muted)]">原文：{{ rw.original }}</p>
               <p class="mt-1 text-sm text-[var(--success)]">优化：{{ rw.rewritten }}</p>
               <p class="mt-1 text-xs text-[var(--primary)]">原因：{{ rw.reason }}</p>
             </div>
           </div>
         </div>
-        <p v-if="!documentsQuery.data.value?.length" class="text-sm text-[var(--text-muted)]">还没有上传资料。</p>
+        <div v-if="!documentsQuery.data.value?.length" class="surface-muted rounded-[var(--radius-md)] p-8 text-center">
+          <h3 class="text-lg font-semibold">还没有材料</h3>
+          <p class="mt-2 text-sm text-[var(--text-secondary)]">从左侧上传简历和岗位描述，材料会在这里统一管理。</p>
+        </div>
       </div>
-    </div>
+    </section>
   </div>
 </template>

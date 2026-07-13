@@ -10,6 +10,12 @@ from app.core.config import get_settings
 from app.services.retrieval import RetrievalService
 
 
+AI_NOTICE_KEY = "_ai_notice"
+AI_LOCAL_NOTICE = "未配置 AI 服务，当前使用本地模拟结果。"
+AI_UNAVAILABLE_NOTICE = "AI 服务暂时不可用，已使用本地示例结果。"
+AI_FORMAT_NOTICE = "AI 返回格式异常，已使用本地示例结果。"
+
+
 class AIAgent:
     def __init__(self, retrieval_service: Optional[RetrievalService] = None):
         self.settings = get_settings()
@@ -50,9 +56,10 @@ class AIAgent:
         """带 RAG 上下文的聊天"""
         context = ""
         if self.retrieval_service:
-            relevant_chunks = await self.retrieval_service.search(
-                user, user_id, top_k=3
-            )
+            try:
+                relevant_chunks = await self.retrieval_service.search(user, user_id, top_k=3)
+            except Exception:
+                relevant_chunks = []
             if relevant_chunks:
                 context = "\n---\n".join(relevant_chunks)
 
@@ -107,6 +114,57 @@ class AIAgent:
             return {"评分标准": rubric}
         return {"clarity": 25, "structure": 25, "evidence": 25, "reflection": 25}
 
+    def _normalize_questions_payload(self, payload: object, focus: str, count: int) -> list[dict]:
+        """将模型返回的题目结构统一成可保存的数组。"""
+        if isinstance(payload, dict):
+            payload = payload.get("questions")
+        if not isinstance(payload, list):
+            return self._fallback_questions(focus, count, AI_FORMAT_NOTICE)
+
+        questions: list[dict] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                return self._fallback_questions(focus, count, AI_FORMAT_NOTICE)
+            category = item.get("category")
+            difficulty = item.get("difficulty")
+            prompt = item.get("prompt")
+            if not isinstance(category, str) or not category.strip():
+                return self._fallback_questions(focus, count, AI_FORMAT_NOTICE)
+            if difficulty not in {"easy", "medium", "hard"}:
+                return self._fallback_questions(focus, count, AI_FORMAT_NOTICE)
+            if not isinstance(prompt, str) or not prompt.strip():
+                return self._fallback_questions(focus, count, AI_FORMAT_NOTICE)
+            questions.append(
+                {
+                    "category": category.strip(),
+                    "difficulty": difficulty,
+                    "prompt": prompt.strip(),
+                    "rubric": self._normalize_rubric(item.get("rubric")),
+                }
+            )
+        return questions or self._fallback_questions(focus, count, AI_FORMAT_NOTICE)
+
+    def _fallback_notice(self, exc: Exception | None = None) -> str:
+        if not self.settings.ai_api_key:
+            return AI_LOCAL_NOTICE
+        if isinstance(exc, (json.JSONDecodeError, TypeError, KeyError, ValueError)):
+            return AI_FORMAT_NOTICE
+        return AI_UNAVAILABLE_NOTICE
+
+    @staticmethod
+    def _mark_notice(payload: dict, notice: str | None) -> dict:
+        if notice:
+            payload[AI_NOTICE_KEY] = notice
+        return payload
+
+    @staticmethod
+    def _valid_score_payload(payload: object) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        score = payload.get("score")
+        dimensions = payload.get("dimensions")
+        return isinstance(score, int) and 0 <= score <= 100 and isinstance(dimensions, dict)
+
     async def generate_questions(
         self, focus: str, count: int, user_id: int
     ) -> list[dict]:
@@ -120,17 +178,16 @@ class AIAgent:
 
 输出 JSON 数组。"""
 
-        result = await self._chat_with_rag(system, f"训练重点：{focus}", user_id)
+        try:
+            result = await self._chat_with_rag(system, f"训练重点：{focus}", user_id)
+        except Exception as exc:
+            return self._fallback_questions(focus, count, self._fallback_notice(exc))
 
         try:
             questions = json.loads(self._strip_code_fences(result))
-            for q in questions:
-                if isinstance(q, dict):
-                    q["rubric"] = self._normalize_rubric(q.get("rubric"))
-            return questions
-        except json.JSONDecodeError:
-            # 降级到固定模板
-            return self._fallback_questions(focus, count)
+            return self._normalize_questions_payload(questions, focus, count)
+        except json.JSONDecodeError as exc:
+            return self._fallback_questions(focus, count, self._fallback_notice(exc))
 
     async def score_answer(self, question: str, answer: str, user_id: int) -> dict:
         """评分回答（基于 RAG）"""
@@ -143,14 +200,20 @@ class AIAgent:
 严格按 JSON 格式输出：
 {"score": 总分, "dimensions": {"clarity": 分, "structure": 分, "evidence": 分, "reflection": 分}, "summary": "一句话总结", "strengths": ["优点1"], "improvements": ["改进1"], "follow_up": "追问"}"""
 
-        result = await self._chat_with_rag(
-            system, f"题目：{question}\n回答：{answer}", user_id
-        )
+        try:
+            result = await self._chat_with_rag(
+                system, f"题目：{question}\n回答：{answer}", user_id
+            )
+        except Exception as exc:
+            return self._fallback_score(self._fallback_notice(exc))
 
         try:
-            return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
-            return self._fallback_score()
+            payload = json.loads(self._strip_code_fences(result))
+            if not self._valid_score_payload(payload):
+                raise ValueError("invalid score payload")
+            return payload
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            return self._fallback_score(self._fallback_notice(exc))
 
     async def build_report(self, title: str, turns: list[dict], user_id: int) -> dict:
         """构建报告（基于 RAG）"""
@@ -167,14 +230,17 @@ class AIAgent:
 
 输出 JSON 格式。"""
 
-        result = await self._chat_with_rag(
-            system, f"{title}\n{joined[:6000]}", user_id
-        )
+        try:
+            result = await self._chat_with_rag(
+                system, f"{title}\n{joined[:6000]}", user_id
+            )
+        except Exception as exc:
+            return self._fallback_report(title, turns, self._fallback_notice(exc))
 
         try:
             return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
-            return self._fallback_report(title, turns)
+        except json.JSONDecodeError as exc:
+            return self._fallback_report(title, turns, self._fallback_notice(exc))
 
     async def build_roadmap(
         self, resume_text: str, jd_text: str, target_role: str, user_id: int
@@ -185,30 +251,36 @@ class AIAgent:
 {"summary":"一句话匹配总结","milestones":["阶段1","阶段2","阶段3","阶段4"],"focusAreas":["重点1","重点2","重点3","重点4"],"strengths":["优势1","优势2"],"gaps":["差距1","差距2"]}
 要求：milestones按时间排序且可执行，focusAreas针对核心能力，strengths/gaps基于实际对比。"""
 
-        result = await self._chat_with_rag(system, prompt, user_id)
+        try:
+            result = await self._chat_with_rag(system, prompt, user_id)
+        except Exception as exc:
+            return self._fallback_roadmap(self._fallback_notice(exc))
 
         try:
             return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
             # 降级：尝试提取部分内容
-            return {
+            return self._mark_notice({
                 "summary": result[:900] if result else "建议先完善简历和 JD 信息",
                 "milestones": ["岗位匹配分析", "高频题训练", "STAR 表达打磨", "模拟面试复盘"],
                 "focusAreas": ["业务理解", "项目深挖", "结构化表达", "反问准备"],
                 "strengths": [],
                 "gaps": [],
-            }
+            }, self._fallback_notice(exc))
 
     async def extract_jd_keywords(self, jd_content: str, user_id: int) -> dict:
         """从 JD 中提取结构化关键词（使用更快的模型）"""
         system = "从JD提取5-8个关键词，JSON：{\"keywords\":[{\"term\":\"词\",\"category\":\"技术/软技能/经验\",\"importance\":\"high/medium\"}]}"
 
-        result = await self._chat_fast(system, jd_content[:4000])
+        try:
+            result = await self._chat_fast(system, jd_content[:4000])
+        except Exception as exc:
+            return self._fallback_keywords(jd_content, self._fallback_notice(exc))
 
         try:
             return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
-            return self._fallback_keywords(jd_content)
+        except json.JSONDecodeError as exc:
+            return self._fallback_keywords(jd_content, self._fallback_notice(exc))
 
     async def _chat_fast(self, system: str, user: str) -> str:
         """使用更快的模型处理简单任务（如关键词提取）"""
@@ -269,10 +341,13 @@ star_hint 用一句话说明 S→T→A→R 每步怎么讲。"""
         ]
 
     async def coach_with_context(self, message: str, context: dict) -> str:
-        return await self._chat(
-            self.assistant_system_prompt(),
-            self.assistant_user_prompt(message, context),
-        )
+        try:
+            return await self._chat(
+                self.assistant_system_prompt(),
+                self.assistant_user_prompt(message, context),
+            )
+        except Exception:
+            return "助手暂时无法回答，请稍后重试。"
 
     async def stream_coach_with_context(
         self, message: str, context: dict
@@ -298,14 +373,17 @@ star_hint 用一句话说明 S→T→A→R 每步怎么讲。"""
 模块至少包含：教育背景、工作经历、项目经验、技能清单。
 评分标准：量化数据、STAR 结构、关键词覆盖、排版清晰度。"""
 
-        result = await self._chat_with_rag(
-            system, content[:6000], user_id
-        )
+        try:
+            result = await self._chat_with_rag(
+                system, content[:6000], user_id
+            )
+        except Exception as exc:
+            return self._fallback_analysis(self._fallback_notice(exc))
 
         try:
             return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
-            return self._fallback_analysis()
+        except json.JSONDecodeError as exc:
+            return self._fallback_analysis(self._fallback_notice(exc))
 
     async def analyze_jd_match(self, resume_text: str, jd_text: str, user_id: int) -> dict:
         """JD 匹配差距分析：对比简历与 JD 要求，标出覆盖项和缺失项"""
@@ -313,20 +391,19 @@ star_hint 用一句话说明 S→T→A→R 每步怎么讲。"""
 {"matched":[{"requirement":"JD要求","evidence":"简历证据"}],"gaps":[{"requirement":"JD要求","severity":"high/medium/low","suggestion":"弥补建议"}],"summary":"一句话总结"}
 matched=已覆盖，gaps=未覆盖。severity: high=核心缺失, medium=可弥补, low=加分项。"""
 
-        result = await self._chat_with_rag(
-            system,
-            f"简历：\n{resume_text[:3000]}\n\nJD：\n{jd_text[:3000]}",
-            user_id,
-        )
+        try:
+            result = await self._chat_with_rag(
+                system,
+                f"简历：\n{resume_text[:3000]}\n\nJD：\n{jd_text[:3000]}",
+                user_id,
+            )
+        except Exception as exc:
+            return self._fallback_jd_match(self._fallback_notice(exc))
 
         try:
             return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
-            return {
-                "matched": [],
-                "gaps": [],
-                "summary": "分析失败，请重试",
-            }
+        except json.JSONDecodeError as exc:
+            return self._fallback_jd_match(self._fallback_notice(exc))
 
     async def rewrite_resume(self, resume_text: str, jd_text: str, user_id: int) -> dict:
         """简历优化重写：根据 JD 优化简历内容，输出改写建议"""
@@ -347,25 +424,23 @@ matched=已覆盖，gaps=未覆盖。severity: high=核心缺失, medium=可弥�
 rewrites 至少给出 3 处具体修改建议，要贴近原始内容。
 missing_keywords 列出 JD 中有但简历缺失的关键词。"""
 
-        result = await self._chat_with_rag(
-            system,
-            f"简历：\n{resume_text[:3000]}\n\nJD：\n{jd_text[:3000]}",
-            user_id,
-        )
+        try:
+            result = await self._chat_with_rag(
+                system,
+                f"简历：\n{resume_text[:3000]}\n\nJD：\n{jd_text[:3000]}",
+                user_id,
+            )
+        except Exception as exc:
+            return self._fallback_rewrite(self._fallback_notice(exc))
 
         try:
             return json.loads(self._strip_code_fences(result))
-        except json.JSONDecodeError:
-            return {
-                "overall_suggestion": "请重试",
-                "rewrites": [],
-                "missing_keywords": [],
-                "ats_score_estimate": 0,
-            }
+        except json.JSONDecodeError as exc:
+            return self._fallback_rewrite(self._fallback_notice(exc))
 
-    def _fallback_analysis(self) -> dict:
+    def _fallback_analysis(self, notice: str | None = None) -> dict:
         """简历诊断降级方案"""
-        return {
+        return self._mark_notice({
             "overall_score": 65,
             "modules": [
                 {"name": "教育背景", "score": 70, "comment": "信息完整"},
@@ -375,9 +450,9 @@ missing_keywords 列出 JD 中有但简历缺失的关键词。"""
             ],
             "issues": ["建议补充更多量化成果", "项目描述缺少 STAR 结构"],
             "suggestions": ["用数据量化工作成果", "按 STAR 结构重写项目经历"],
-        }
+        }, notice)
 
-    def _fallback_keywords(self, jd_content: str) -> dict:
+    def _fallback_keywords(self, jd_content: str, notice: str | None = None) -> dict:
         """关键词提取降级方案：简单分词"""
         import re
         words = re.findall(r'[一-鿿]{2,}|[A-Za-z][A-Za-z+#.]{2,}', jd_content)
@@ -389,7 +464,31 @@ missing_keywords 列出 JD 中有但简历缺失的关键词。"""
                 keywords.append({"term": word, "category": "技术", "importance": "medium"})
             if len(keywords) >= 15:
                 break
-        return {"keywords": keywords}
+        return self._mark_notice({"keywords": keywords}, notice)
+
+    def _fallback_jd_match(self, notice: str | None = None) -> dict:
+        return self._mark_notice({
+            "matched": [],
+            "gaps": [],
+            "summary": "AI 分析暂时不可用，已使用本地示例结果。",
+        }, notice)
+
+    def _fallback_rewrite(self, notice: str | None = None) -> dict:
+        return self._mark_notice({
+            "overall_suggestion": "AI 优化暂时不可用，已使用本地示例结果。",
+            "rewrites": [],
+            "missing_keywords": [],
+            "ats_score_estimate": 0,
+        }, notice)
+
+    def _fallback_roadmap(self, notice: str | None = None) -> dict:
+        return self._mark_notice({
+            "summary": "AI 分析暂时不可用，已使用本地示例结果。",
+            "milestones": ["岗位匹配分析", "高频题训练", "STAR 表达打磨", "模拟面试复盘"],
+            "focusAreas": ["业务理解", "项目深挖", "结构化表达", "反问准备"],
+            "strengths": [],
+            "gaps": [],
+        }, notice)
 
     def assistant_system_prompt(self) -> str:
         return (
@@ -408,7 +507,7 @@ missing_keywords 列出 JD 中有但简历缺失的关键词。"""
             "下一步建议：补齐岗位信息、生成 6 道高频题、完成一轮文字模拟面试，并用复盘报告修正表达。"
         )
 
-    def _fallback_questions(self, focus: str, count: int) -> list[dict]:
+    def _fallback_questions(self, focus: str, count: int, notice: str | None = None) -> list[dict]:
         prompts = [
             f"请结合 {focus} 讲一个最能体现你解决复杂问题的项目。",
             "如果面试官质疑你的项目影响力，你会如何用数据回应？",
@@ -422,13 +521,16 @@ missing_keywords 列出 JD 中有但简历缺失的关键词。"""
                 "category": focus,
                 "difficulty": "medium" if i % 3 else "hard",
                 "prompt": prompts[i % len(prompts)],
-                "rubric": {"clarity": 25, "structure": 25, "evidence": 25, "reflection": 25},
+                "rubric": self._mark_notice(
+                    {"clarity": 25, "structure": 25, "evidence": 25, "reflection": 25},
+                    notice,
+                ),
             }
             for i in range(count)
         ]
 
-    def _fallback_score(self) -> dict:
-        return {
+    def _fallback_score(self, notice: str | None = None) -> dict:
+        return self._mark_notice({
             "score": 70,
             "dimensions": {
                 "clarity": 70,
@@ -440,10 +542,10 @@ missing_keywords 列出 JD 中有但简历缺失的关键词。"""
             "strengths": ["回答完整"],
             "improvements": ["可以更具体", "需要量化"],
             "follow_up": "能否补充一个具体指标？",
-        }
+        }, notice)
 
-    def _fallback_report(self, title: str, turns: list[dict]) -> dict:
-        return {
+    def _fallback_report(self, title: str, turns: list[dict], notice: str | None = None) -> dict:
+        return self._mark_notice({
             "title": title,
             "overall": "整体表现良好，建议加强结构化表达。",
             "average_scores": {
@@ -454,4 +556,4 @@ missing_keywords 列出 JD 中有但简历缺失的关键词。"""
             },
             "improvements": ["使用 STAR 结构", "补充量化数据", "加强复盘深度"],
             "next_steps": ["练习高频题", "准备项目案例", "模拟面试"],
-        }
+        }, notice)

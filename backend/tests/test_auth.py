@@ -9,10 +9,12 @@ from sqlalchemy import select
 
 from app.core.database import Base, SessionLocal, engine
 from app.main import app
-from app.models import AssistantConversation, AssistantMessage, User
+from app.models import AssistantConversation, AssistantMessage, Document, DocumentKind, User
 
 
 def setup_module() -> None:
+    if engine.url.get_backend_name() != "sqlite":
+        raise RuntimeError("认证测试只允许清理 SQLite 测试数据库。")
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 
@@ -270,3 +272,67 @@ def test_assistant_conversation_restores_latest_message_window() -> None:
     assert len(messages) == 80
     assert messages[0]["content"] == "message-5"
     assert messages[-1]["content"] == "message-84"
+
+
+def test_guest_can_convert_to_registered_user_and_keep_documents() -> None:
+    guest = client.post("/api/auth/guest")
+    assert guest.status_code == 200
+    token = guest.json()["access_token"]
+    user_id = guest.json()["user"]["id"]
+
+    with SessionLocal() as db:
+        db.add(
+            Document(
+                user_id=user_id,
+                kind=DocumentKind.resume,
+                filename="resume.txt",
+                content="测试简历",
+                summary={"preview": "测试简历"},
+            )
+        )
+        db.commit()
+
+    response = client.post(
+        "/api/auth/convert-guest",
+        json={"username": "converted-user", "password": "password123", "email": "converted@example.com"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user"]["id"] == user_id
+    assert data["user"]["username"] == "converted-user"
+    assert data["user"]["email"] == "converted@example.com"
+    assert data["user"]["is_anonymous"] is False
+
+    documents = client.get("/api/documents", headers={"Authorization": f"Bearer {data['access_token']}"})
+    assert documents.status_code == 200
+    assert documents.json()[0]["filename"] == "resume.txt"
+
+
+def test_guest_convert_rejects_duplicate_username_and_non_guest() -> None:
+    registered = client.post(
+        "/api/auth/register",
+        json={"username": "existing-user", "password": "password123", "email": "existing@example.com"},
+    )
+    assert registered.status_code == 200
+
+    guest = client.post("/api/auth/guest")
+    assert guest.status_code == 200
+    token = guest.json()["access_token"]
+
+    duplicate = client.post(
+        "/api/auth/convert-guest",
+        json={"username": "existing-user", "password": "password123"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"] == "用户名已注册"
+
+    non_guest = client.post(
+        "/api/auth/convert-guest",
+        json={"username": "another-user", "password": "password123"},
+        headers={"Authorization": f"Bearer {registered.json()['access_token']}"},
+    )
+    assert non_guest.status_code == 400
+    assert non_guest.json()["detail"] == "当前账号不是游客账号"

@@ -9,13 +9,21 @@ type AuthState = {
   isGuest: boolean
 }
 
-const stored = localStorage.getItem('interviewpilot-auth')
-const initialState: AuthState = stored
-  ? (() => {
-      const parsed = JSON.parse(stored) as AuthState
-      return { ...parsed, isGuest: parsed.user?.is_anonymous ?? false }
-    })()
-  : { accessToken: '', refreshToken: '', user: null, isGuest: false }
+const emptyState: AuthState = { accessToken: '', refreshToken: '', user: null, isGuest: false }
+
+function readInitialState(): AuthState {
+  const stored = localStorage.getItem('interviewpilot-auth')
+  if (!stored) return emptyState
+  try {
+    const parsed = JSON.parse(stored) as AuthState
+    return { ...parsed, isGuest: parsed.user?.is_anonymous ?? false }
+  } catch {
+    localStorage.removeItem('interviewpilot-auth')
+    return emptyState
+  }
+}
+
+const initialState: AuthState = readInitialState()
 
 export const useAuthStore = defineStore('auth', {
   state: (): AuthState => initialState,

@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -6,9 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
-from app.core.database import Base, engine
+from app.core.database import SessionLocal
 from app.core.logging import get_logger, setup_logging
 from app.routers import assistant, auth, documents, interviews, prep_plans, questions, reports, streams
+from app.services.guest_cleanup import cleanup_expired_guests
 
 setup_logging()
 logger = get_logger(__name__)
@@ -16,8 +18,35 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
-    Base.metadata.create_all(bind=engine)
-    yield
+    settings = get_settings()
+
+    def _cleanup_once() -> None:
+        with SessionLocal() as db:
+            cleanup_expired_guests(db, settings.guest_retention_hours)
+
+    async def _cleanup_loop() -> None:
+        interval_seconds = max(settings.guest_cleanup_interval_minutes, 1) * 60
+        while True:
+            await asyncio.sleep(interval_seconds)
+            try:
+                await asyncio.to_thread(_cleanup_once)
+            except Exception as exc:
+                logger.error("guest_cleanup_failed", error=str(exc), exc_info=True)
+
+    try:
+        await asyncio.to_thread(_cleanup_once)
+    except Exception as exc:
+        logger.error("guest_cleanup_startup_failed", error=str(exc), exc_info=True)
+
+    cleanup_task = asyncio.create_task(_cleanup_loop())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
 
 
 settings = get_settings()

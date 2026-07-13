@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.models import DocumentKind, InterviewStatus
+from app.models import DocumentEmbeddingStatus, DocumentKind, InterviewStatus
 
 
 PASSWORD_RULES = "密码至少需要 8 个字符"
@@ -85,12 +85,19 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class GuestConvertRequest(UserCreate):
+    pass
+
+
 class DocumentRead(BaseModel):
     id: int
     kind: DocumentKind
     filename: str
     summary: dict
     analysis: dict | None = None
+    embedding_status: DocumentEmbeddingStatus = DocumentEmbeddingStatus.pending
+    embedding_error: str | None = None
+    chunk_count: int = 0
     created_at: datetime
 
     model_config = {"from_attributes": True}

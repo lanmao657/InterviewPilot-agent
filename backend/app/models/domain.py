@@ -18,6 +18,13 @@ class InterviewStatus(str, Enum):
     completed = "completed"
 
 
+class DocumentEmbeddingStatus(str, Enum):
+    pending = "pending"
+    processing = "processing"
+    ready = "ready"
+    failed = "failed"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -47,6 +54,13 @@ class Document(Base):
     content: Mapped[str] = mapped_column(Text)
     summary: Mapped[dict] = mapped_column(JSON, default=dict)
     analysis: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
+    embedding_status: Mapped[DocumentEmbeddingStatus] = mapped_column(
+        SAEnum(DocumentEmbeddingStatus),
+        default=DocumentEmbeddingStatus.pending,
+        server_default=DocumentEmbeddingStatus.pending.value,
+    )
+    embedding_error: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="documents")

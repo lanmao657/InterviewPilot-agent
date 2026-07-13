@@ -4,9 +4,15 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
-import * as echarts from 'echarts'
+import { RadarChart } from 'echarts/charts'
+import { LegendComponent, TooltipComponent } from 'echarts/components'
+import * as echarts from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import type { ECharts } from 'echarts/core'
 
 import { useThemeStore } from '@/stores/theme'
+
+echarts.use([RadarChart, TooltipComponent, LegendComponent, CanvasRenderer])
 
 interface Props {
   data: {
@@ -20,16 +26,16 @@ interface Props {
 const props = defineProps<Props>()
 const theme = useThemeStore()
 const chartRef = ref<HTMLElement>()
-let chart: echarts.ECharts | null = null
+let chart: ECharts | null = null
 
 const isDark = computed(() => theme.resolved === 'dark')
 
 const colors = computed(() => ({
-  primary: isDark.value ? '#60a5fa' : '#3b82f6',
-  primaryAlpha: isDark.value ? 'rgba(96, 165, 250, 0.3)' : 'rgba(59, 130, 246, 0.3)',
-  text: isDark.value ? '#f1f5f9' : '#1e293b',
-  textSecondary: isDark.value ? '#94a3b8' : '#64748b',
-  splitLine: isDark.value ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
+  primary: isDark.value ? '#f08b70' : '#9f432f',
+  primaryAlpha: isDark.value ? 'rgba(240, 139, 112, 0.18)' : 'rgba(159, 67, 47, 0.14)',
+  text: isDark.value ? '#f2ede5' : '#292621',
+  textSecondary: isDark.value ? '#c1b9ad' : '#5f5a52',
+  splitLine: isDark.value ? '#443e36' : '#d8d0c4',
 }))
 
 function updateChart() {

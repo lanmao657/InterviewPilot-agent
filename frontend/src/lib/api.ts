@@ -5,12 +5,16 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 export type User = { id: number; username: string; name: string; email: string | null; is_anonymous: boolean }
 export type TokenPair = { access_token: string; refresh_token: string; token_type: string; user: User }
+export type EmbeddingStatus = 'pending' | 'processing' | 'ready' | 'failed'
 export type DocumentItem = {
   id: number
   kind: 'resume' | 'job_description'
   filename: string
   summary: Record<string, unknown>
   analysis?: Record<string, unknown> | null
+  embedding_status: EmbeddingStatus
+  embedding_error: string | null
+  chunk_count: number
   created_at: string
 }
 export type PrepPlan = { id: number; title: string; target_role: string; fit_score: number; status: string; roadmap: Record<string, unknown>; created_at: string }
@@ -53,6 +57,7 @@ export type AssistantChatResponse = {
 }
 
 type RequestOptions = RequestInit & { auth?: boolean }
+export type SseEvent = { event: string; data: string }
 
 function formatApiError(data: unknown): string {
   if (!data || typeof data !== 'object' || !('detail' in data)) {
@@ -93,6 +98,15 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     try { useToastStore().error(msg) } catch { /* store 未初始化时静默 */ }
     throw new Error(msg)
   }
+  if (response.status === 401 && options.auth !== false && auth.refreshToken && path !== '/auth/refresh') {
+    const refreshed = await refreshSession(auth.refreshToken)
+    if (refreshed) {
+      headers.set('Authorization', `Bearer ${refreshed.access_token}`)
+      response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers })
+    } else {
+      auth.logout()
+    }
+  }
   if (!response.ok) {
     const data = await response.json().catch(() => ({ detail: '请求失败' }))
     const msg = formatApiError(data)
@@ -103,6 +117,43 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return response.json() as Promise<T>
 }
 
+async function refreshSession(refreshToken: string): Promise<TokenPair | null> {
+  const auth = useAuthStore()
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    })
+    if (!response.ok) return null
+    const session = await response.json() as TokenPair
+    auth.setSession(session, session.user.is_anonymous)
+    return session
+  } catch {
+    return null
+  }
+}
+
+async function readErrorMessage(response: Response): Promise<string> {
+  const data = await response.json().catch(() => ({ detail: '请求失败' }))
+  return formatApiError(data)
+}
+
+export function parseSseBlock(block: string): SseEvent | null {
+  const event = block
+    .split('\n')
+    .find((line) => line.startsWith('event: '))
+    ?.replace('event: ', '')
+    .trim() || 'message'
+  const data = block
+    .split('\n')
+    .filter((line) => line.startsWith('data: '))
+    .map((line) => line.replace('data: ', ''))
+    .join('\n')
+  if (!data && event === 'message') return null
+  return { event, data }
+}
+
 export const api = {
   register: (payload: { username: string; password: string; email?: string }) =>
     request<TokenPair>('/auth/register', { method: 'POST', body: JSON.stringify(payload), auth: false }),
@@ -110,6 +161,8 @@ export const api = {
     request<TokenPair>('/auth/login', { method: 'POST', body: JSON.stringify(payload), auth: false }),
   guestLogin: () =>
     request<TokenPair>('/auth/guest', { method: 'POST', auth: false }),
+  convertGuest: (payload: { username: string; password: string; email?: string }) =>
+    request<TokenPair>('/auth/convert-guest', { method: 'POST', body: JSON.stringify(payload) }),
   me: () => request<User>('/auth/me'),
   documents: () => request<DocumentItem[]>('/documents'),
   uploadDocument: (kind: 'resume' | 'job-description', file: File) => {
@@ -137,7 +190,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.accessToken}` },
       body: JSON.stringify(payload),
     })
-    if (!response.ok) throw new Error('流式请求失败')
+    if (!response.ok) throw new Error(await readErrorMessage(response))
     const reader = response.body!.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
@@ -149,18 +202,15 @@ export const api = {
       const events = buffer.split('\n\n')
       buffer = events.pop() ?? ''
       for (const block of events) {
-        const lines = block.split('\n')
-        const eventLine = lines.find((l) => l.startsWith('event: '))
-        const dataLine = lines.find((l) => l.startsWith('data: '))
-        if (!eventLine || !dataLine) continue
-        const eventName = eventLine.replace('event: ', '').trim()
-        const rawData = dataLine.replace('data: ', '')
+        const sse = parseSseBlock(block)
+        if (!sse) continue
+        if (sse.event === 'error') throw new Error(sse.data || '流式请求失败')
         try {
-          const parsed = JSON.parse(rawData)
-          if (eventName === 'done') {
+          const parsed = JSON.parse(sse.data)
+          if (sse.event === 'done') {
             plan = parsed
           }
-          onEvent(eventName, parsed)
+          onEvent(sse.event, parsed)
         } catch { /* ignore parse errors */ }
       }
     }
@@ -199,7 +249,7 @@ export async function streamApi(path: string, onChunk: (chunk: string) => void):
     headers: { Authorization: `Bearer ${auth.accessToken}` },
   })
   if (!response.ok || !response.body) {
-    throw new Error('流式请求失败')
+    throw new Error(response.body ? await readErrorMessage(response) : '流式请求失败')
   }
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
@@ -210,12 +260,11 @@ export async function streamApi(path: string, onChunk: (chunk: string) => void):
     buffer += decoder.decode(value, { stream: true })
     const events = buffer.split('\n\n')
     buffer = events.pop() ?? ''
-    for (const event of events) {
-      const isError = event.split('\n').some((item) => item === 'event: error')
-      const line = event.split('\n').find((item) => item.startsWith('data: '))
-      const chunk = line?.replace('data: ', '')
-      if (isError) throw new Error(chunk || '流式请求失败')
-      if (chunk && chunk !== '[DONE]') onChunk(chunk)
+    for (const block of events) {
+      const event = parseSseBlock(block)
+      if (!event) continue
+      if (event.event === 'error') throw new Error(event.data || '流式请求失败')
+      if (event.data && event.data !== '[DONE]') onChunk(event.data)
     }
   }
 }

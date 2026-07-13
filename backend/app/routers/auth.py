@@ -10,7 +10,8 @@ from app.core.database import get_db
 from app.core.security import create_token, decode_token, hash_password, verify_password
 from app.deps import get_current_user
 from app.models import User
-from app.schemas import RefreshRequest, TokenPair, UserCreate, UserLogin, UserRead
+from app.schemas import GuestConvertRequest, RefreshRequest, TokenPair, UserCreate, UserLogin, UserRead
+from app.services.guest_cleanup import cleanup_expired_guests, delete_guest_user_data, is_guest_expired
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -55,6 +56,10 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)) -> TokenPair
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
+    if is_guest_expired(user, get_settings().guest_retention_hours):
+        delete_guest_user_data(db, [user.id])
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="游客会话已过期，请重新登录")
     return _token_pair(user)
 
 
@@ -66,6 +71,7 @@ def me(user: User = Depends(get_current_user)) -> User:
 @router.post("/guest", response_model=TokenPair)
 def guest_login(db: Session = Depends(get_db)) -> TokenPair:
     """游客登录：自动创建匿名用户"""
+    cleanup_expired_guests(db, get_settings().guest_retention_hours)
     guest_id = str(uuid.uuid4())[:8]
     username = f"guest_{guest_id}"
 
@@ -76,6 +82,34 @@ def guest_login(db: Session = Depends(get_db)) -> TokenPair:
         hashed_password=hash_password(uuid.uuid4().hex),
         is_anonymous=True,
     )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return _token_pair(user)
+
+
+@router.post("/convert-guest", response_model=TokenPair)
+def convert_guest(
+    payload: GuestConvertRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TokenPair:
+    if not user.is_anonymous:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="当前账号不是游客账号")
+
+    existing_username = db.scalar(select(User).where(User.username == payload.username, User.id != user.id))
+    if existing_username:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户名已注册")
+
+    email = payload.email.lower() if payload.email else None
+    if email and db.scalar(select(User).where(User.email == email, User.id != user.id)):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="邮箱已注册")
+
+    user.username = payload.username
+    user.email = email
+    user.name = payload.username
+    user.hashed_password = hash_password(payload.password)
+    user.is_anonymous = False
     db.add(user)
     db.commit()
     db.refresh(user)

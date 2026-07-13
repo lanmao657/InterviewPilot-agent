@@ -1,8 +1,8 @@
 <!-- frontend/src/pages/LoginPage.vue -->
 <script setup lang="ts">
 import { Loader2, UserX } from 'lucide-vue-next'
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,14 +11,16 @@ import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
-const isRegister = ref(false)
+const isRegister = ref(route.query.mode === 'register')
 const loading = ref(false)
 const guestLoading = ref(false)
 const error = ref('')
 const form = ref({ username: 'demo', password: 'password123' })
 const usernameRequirements = '3-120 个字符，不能含 @'
 const passwordRequirements = '至少 8 位'
+const isGuestConversion = computed(() => isRegister.value && route.query.guest === '1' && auth.isGuest)
 
 function validateRegistrationForm() {
   const username = form.value.username.trim()
@@ -47,8 +49,12 @@ async function submit() {
   }
   loading.value = true
   try {
-    const session = isRegister.value ? await api.register(form.value) : await api.login(form.value)
-    auth.setSession(session)
+    const session = isGuestConversion.value
+      ? await api.convertGuest(form.value)
+      : isRegister.value
+        ? await api.register(form.value)
+        : await api.login(form.value)
+    auth.setSession(session, session.user.is_anonymous)
     router.push('/dashboard')
   } catch (err) {
     error.value = err instanceof Error ? err.message : '登录失败'
@@ -73,27 +79,38 @@ async function guestLogin() {
 </script>
 
 <template>
-  <main class="relative grid min-h-screen place-items-center overflow-hidden px-4 py-10">
-    <!-- 背景装饰 -->
-    <div class="pointer-events-none absolute inset-0">
-      <div class="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-[var(--primary)]/10 blur-3xl" />
-      <div class="absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-[var(--accent)]/10 blur-3xl" />
-    </div>
-
-    <!-- 主题切换 -->
+  <main class="relative min-h-screen bg-[var(--bg)] px-4 py-8 sm:px-8 lg:grid lg:grid-cols-[1.05fr_0.95fr] lg:items-stretch lg:p-0">
     <div class="absolute right-4 top-4">
       <ThemeToggle />
     </div>
 
-    <!-- 登录卡片 -->
-    <div class="glass-elevated w-full max-w-md rounded-2xl p-8 animate-fade-in-up">
-      <div class="mb-8 text-center">
-        <div class="mx-auto mb-4 grid size-16 place-items-center rounded-2xl bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)] text-2xl font-bold text-white shadow-lg">
-          IP
+    <section class="mx-auto flex min-h-[42vh] max-w-2xl flex-col justify-between py-16 lg:min-h-screen lg:max-w-none lg:border-r lg:border-[var(--border)] lg:px-[10vw] lg:py-20">
+      <div class="flex items-center gap-3">
+        <span class="grid size-11 place-items-center rounded-[var(--radius-sm)] bg-[var(--text-primary)] text-xs font-bold tracking-[0.14em] text-[var(--bg)]">IP</span>
+        <div>
+          <p class="font-display text-lg font-semibold">InterviewPilot</p>
+          <p class="text-xs text-[var(--text-muted)]">面试准备工作台</p>
         </div>
-        <h1 class="text-2xl font-bold">InterviewPilot</h1>
-        <p class="mt-1 text-sm text-[var(--text-secondary)]">AI 面试准备平台</p>
       </div>
+
+      <div class="max-w-xl py-12">
+        <p class="eyebrow">从材料到复盘</p>
+        <h1 class="mt-5 text-4xl font-semibold leading-[1.2] sm:text-5xl lg:text-6xl">
+          把经历整理成<br class="hidden sm:block">能被听懂的证据。
+        </h1>
+        <p class="mt-6 max-w-lg text-base leading-8 text-[var(--text-secondary)]">
+          围绕目标岗位整理材料、训练回答、复盘表现。每一步都留下可继续改进的依据。
+        </p>
+      </div>
+
+      <p class="text-xs leading-5 text-[var(--text-muted)]">准备不是背标准答案，而是更准确地讲清楚你做过什么。</p>
+    </section>
+
+    <section class="mx-auto flex w-full max-w-md items-center py-10 lg:min-h-screen">
+      <div class="surface-raised w-full rounded-[var(--radius-lg)] p-6 sm:p-8">
+        <p class="eyebrow">{{ isRegister ? '建立账户' : '欢迎回来' }}</p>
+        <h2 class="mt-2 text-2xl font-semibold">{{ isGuestConversion ? '保存游客进度' : isRegister ? '创建账号' : '登录 InterviewPilot' }}</h2>
+        <p class="mb-7 mt-2 text-sm text-[var(--text-secondary)]">{{ isRegister ? '保存材料、训练记录与复盘报告。' : '继续上一次面试准备。' }}</p>
 
       <form class="flex flex-col gap-4" @submit.prevent="submit">
         <label class="flex flex-col gap-2 text-sm font-medium">
@@ -114,13 +131,13 @@ async function guestLogin() {
             {{ passwordRequirements }}
           </span>
         </label>
-        <p v-if="error" class="rounded-xl border border-[var(--error)]/30 bg-[var(--error)]/10 px-4 py-2.5 text-sm text-[var(--error)]">
+        <p v-if="error" class="rounded-[var(--radius-md)] border border-[var(--error)]/30 bg-[var(--error-light)] px-4 py-2.5 text-sm text-[var(--error)]" role="alert">
           {{ error }}
         </p>
-        <div class="mt-2 flex gap-3">
+        <div class="mt-2 flex flex-col gap-2 sm:flex-row">
           <Button type="submit" :disabled="loading" class="flex-1">
             <Loader2 v-if="loading" class="size-4 animate-spin" />
-            {{ isRegister ? '注册并进入' : '登录' }}
+            {{ isGuestConversion ? '注册并保存游客数据' : isRegister ? '注册并进入' : '登录' }}
           </Button>
           <Button type="button" variant="secondary" :disabled="guestLoading" class="flex-1" @click="guestLogin">
             <UserX v-if="!guestLoading" class="size-4" />
@@ -132,6 +149,7 @@ async function guestLogin() {
           {{ isRegister ? '已有账号，去登录' : '没有账号，创建一个' }}
         </Button>
       </form>
-    </div>
+      </div>
+    </section>
   </main>
 </template>

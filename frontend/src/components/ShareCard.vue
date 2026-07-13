@@ -27,12 +27,12 @@ const dimLabels: Record<string, string> = {
 // 生成分享文本
 const shareText = computed(() => {
   const lines = [
-    '🎯 InterviewPilot 面试准备成绩单',
-    '━'.repeat(24),
-    `📊 岗位匹配度：${props.fitScore}/100`,
-    `🏆 面试综合分：${props.interviewScore}/100`,
+    'InterviewPilot 面试准备记录',
+    '—'.repeat(24),
+    `岗位匹配度：${props.fitScore}/100`,
+    `面试综合分：${props.interviewScore}/100`,
     '',
-    '📈 各维度得分：',
+    '各维度得分：',
   ]
   for (const [key, label] of Object.entries(dimLabels)) {
     const score = props.dimensionScores[key] ?? 0
@@ -40,9 +40,9 @@ const shareText = computed(() => {
     lines.push(`  ${label} ${bar} ${score}`)
   }
   lines.push('')
-  lines.push(`📝 已完成 ${props.totalQuestions} 道题 · ${props.reportCount} 份复盘报告`)
+  lines.push(`已完成 ${props.totalQuestions} 道题 · ${props.reportCount} 份复盘报告`)
   lines.push('')
-  lines.push('来自 InterviewPilot — AI 面试准备平台')
+  lines.push('来自 InterviewPilot 面试准备工作台')
   return lines.join('\n')
 })
 
@@ -66,7 +66,7 @@ async function copyToClipboard() {
 </script>
 
 <template>
-  <div class="glass rounded-2xl p-5">
+  <div class="surface rounded-[var(--radius-lg)] p-5">
     <div class="mb-4 flex items-center justify-between">
       <div>
         <h3 class="text-base font-semibold">面试准备成绩单</h3>
@@ -80,7 +80,7 @@ async function copyToClipboard() {
     </div>
 
     <!-- 预览卡片 -->
-    <div class="rounded-xl bg-gradient-to-br from-[var(--primary)]/5 to-[var(--accent)]/5 p-4 font-mono text-xs leading-5 whitespace-pre-wrap border border-[var(--border)]">
+    <div class="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-4 font-mono text-xs leading-5 whitespace-pre-wrap">
       {{ shareText }}
     </div>
   </div>

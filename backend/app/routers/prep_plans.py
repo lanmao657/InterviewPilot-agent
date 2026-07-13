@@ -11,12 +11,80 @@ from app.core.logging import get_logger
 from app.deps import get_current_user, get_retrieval_service
 from app.models import Document, PrepPlan, User
 from app.schemas import PrepPlanCreate, PrepPlanRead
-from app.services.ai_agent import AIAgent
+from app.services.ai_agent import AI_NOTICE_KEY, AI_UNAVAILABLE_NOTICE, AIAgent
 from app.services.matching import MatchingService
 from app.services.retrieval import RetrievalService
 
 router = APIRouter(prefix="/prep-plans", tags=["prep-plans"])
 logger = get_logger(__name__)
+
+
+def _embedding_status_value(document: Document) -> str:
+    status = document.embedding_status
+    return getattr(status, "value", status)
+
+
+def _ensure_embedding_ready(document: Document | None) -> None:
+    if not document:
+        return
+    status = _embedding_status_value(document)
+    if status in {"pending", "processing"}:
+        raise HTTPException(status_code=409, detail="文档语义索引仍在建立中，请稍后再试")
+    if status == "failed":
+        detail = document.embedding_error or "文档语义索引建立失败，请重新上传或稍后重试"
+        raise HTTPException(status_code=409, detail=detail)
+
+
+def _notice_for(source: str, payload: object) -> dict | None:
+    if not isinstance(payload, dict):
+        return None
+    notice = payload.get(AI_NOTICE_KEY)
+    if not isinstance(notice, str) or not notice:
+        return None
+    return {"source": source, "message": notice}
+
+
+def _without_ai_notice(payload: dict) -> dict:
+    return {key: value for key, value in payload.items() if key != AI_NOTICE_KEY}
+
+
+def _normalize_roadmap(payload: object) -> dict:
+    if isinstance(payload, dict):
+        return _without_ai_notice(payload)
+    return {}
+
+
+def _normalize_keywords(payload: object) -> list:
+    if isinstance(payload, dict):
+        keywords = payload.get("keywords")
+        return keywords if isinstance(keywords, list) else []
+    if isinstance(payload, list):
+        return payload
+    return []
+
+
+def _normalize_fit_score(payload: object) -> int:
+    if isinstance(payload, dict):
+        payload = payload.get("score")
+    if isinstance(payload, bool):
+        return 68
+    if isinstance(payload, int):
+        return max(0, min(100, payload))
+    return 68
+
+
+def _dedupe_notices(notices: list[dict | None]) -> list[dict]:
+    seen: set[tuple[str, str]] = set()
+    result: list[dict] = []
+    for notice in notices:
+        if not notice:
+            continue
+        key = (str(notice["source"]), str(notice["message"]))
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(notice)
+    return result
 
 
 @router.post("/jd-match")
@@ -43,6 +111,8 @@ async def create_plan(payload: PrepPlanCreate, user: User = Depends(get_current_
         raise HTTPException(status_code=404, detail="简历不存在")
     if jd and jd.user_id != user.id:
         raise HTTPException(status_code=404, detail="JD 不存在")
+    _ensure_embedding_ready(resume)
+    _ensure_embedding_ready(jd)
 
     agent = AIAgent(retrieval)
     resume_text = resume.content if resume else ""
@@ -55,6 +125,7 @@ async def create_plan(payload: PrepPlanCreate, user: User = Depends(get_current_
         except Exception as exc:
             logger.error("build_roadmap_failed", error=str(exc), exc_info=True)
             return {
+                AI_NOTICE_KEY: AI_UNAVAILABLE_NOTICE,
                 "summary": "AI 分析暂时不可用，请稍后重试",
                 "milestones": ["岗位匹配分析", "高频题训练", "STAR 表达打磨", "模拟面试复盘"],
                 "focusAreas": ["业务理解", "项目深挖", "结构化表达", "反问准备"],
@@ -67,23 +138,36 @@ async def create_plan(payload: PrepPlanCreate, user: User = Depends(get_current_
             return []
         try:
             data = await agent.extract_jd_keywords(jd_text, user_id=user.id)
-            return data.get("keywords", [])
         except Exception as exc:
             logger.error("extract_jd_keywords_failed", error=str(exc), exc_info=True)
-            return []
+            return {AI_NOTICE_KEY: AI_UNAVAILABLE_NOTICE, "keywords": []}
+        return data
 
     async def _compute_fit():
         if resume and jd:
             try:
                 return await MatchingService(retrieval, db).compute_fit_score(resume.id, jd.id, user.id)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.error("compute_fit_score_failed", error=str(exc), exc_info=True)
+                return {"score": 68, AI_NOTICE_KEY: AI_UNAVAILABLE_NOTICE}
         return 68
 
-    roadmap, keywords, fit_score = await asyncio.gather(
+    roadmap_result, keywords_result, fit_score_result = await asyncio.gather(
         _build_roadmap(), _extract_keywords(), _compute_fit()
     )
+    notices = _dedupe_notices(
+        [
+            _notice_for("roadmap", roadmap_result),
+            _notice_for("keywords", keywords_result),
+            _notice_for("fit_score", fit_score_result),
+        ]
+    )
+    roadmap = _normalize_roadmap(roadmap_result)
+    keywords = _normalize_keywords(keywords_result)
+    fit_score = _normalize_fit_score(fit_score_result)
     roadmap["keywords"] = keywords
+    if notices:
+        roadmap["_ai_notices"] = notices
 
     plan = PrepPlan(
         user_id=user.id,
@@ -114,6 +198,8 @@ async def create_plan_stream(
         raise HTTPException(status_code=404, detail="简历不存在")
     if jd and jd.user_id != user.id:
         raise HTTPException(status_code=404, detail="JD 不存在")
+    _ensure_embedding_ready(resume)
+    _ensure_embedding_ready(jd)
 
     agent = AIAgent(retrieval)
     resume_text = resume.content if resume else ""
@@ -126,6 +212,7 @@ async def create_plan_stream(
             except Exception as exc:
                 logger.error("build_roadmap_failed", error=str(exc), exc_info=True)
                 return {
+                    AI_NOTICE_KEY: AI_UNAVAILABLE_NOTICE,
                     "summary": "AI 分析暂时不可用，请稍后重试",
                     "milestones": ["岗位匹配分析", "高频题训练", "STAR 表达打磨", "模拟面试复盘"],
                     "focusAreas": ["业务理解", "项目深挖", "结构化表达", "反问准备"],
@@ -138,17 +225,18 @@ async def create_plan_stream(
                 return []
             try:
                 data = await agent.extract_jd_keywords(jd_text, user_id=user.id)
-                return data.get("keywords", [])
             except Exception as exc:
                 logger.error("extract_jd_keywords_failed", error=str(exc), exc_info=True)
-                return []
+                return {AI_NOTICE_KEY: AI_UNAVAILABLE_NOTICE, "keywords": []}
+            return data
 
         async def _compute_fit():
             if resume and jd:
                 try:
                     return await MatchingService(retrieval, db).compute_fit_score(resume.id, jd.id, user.id)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.error("compute_fit_score_failed", error=str(exc), exc_info=True)
+                    return {"score": 68, AI_NOTICE_KEY: AI_UNAVAILABLE_NOTICE}
             return 68
 
         queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
@@ -171,11 +259,22 @@ async def create_plan_stream(
             name, result = await queue.get()
             results[name] = result
             yield f"event: {name}\ndata: {json.dumps(result, ensure_ascii=False)}\n\n"
+            if notice := _notice_for(name, result):
+                yield f"event: notice\ndata: {json.dumps(notice, ensure_ascii=False)}\n\n"
 
         # 组装并保存
-        roadmap = results.get("roadmap") or {}
-        roadmap["keywords"] = results.get("keywords") or []
-        fit_score = results.get("fit_score") or 68
+        notices = _dedupe_notices(
+            [
+                _notice_for("roadmap", results.get("roadmap")),
+                _notice_for("keywords", results.get("keywords")),
+                _notice_for("fit_score", results.get("fit_score")),
+            ]
+        )
+        roadmap = _normalize_roadmap(results.get("roadmap"))
+        roadmap["keywords"] = _normalize_keywords(results.get("keywords"))
+        if notices:
+            roadmap["_ai_notices"] = notices
+        fit_score = _normalize_fit_score(results.get("fit_score"))
 
         plan = PrepPlan(
             user_id=user.id,
