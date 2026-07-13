@@ -61,7 +61,9 @@ os.environ["AI_API_KEY"] = ""
 os.environ["EMBEDDING_API_KEY"] = "test-key"
 
 
-def pytest_sessionstart(_session) -> None:
+def pytest_sessionstart(session) -> None:
+    del session
+
     from app.core.config import get_settings
 
     get_settings.cache_clear()

@@ -20,18 +20,34 @@ describe('SSE parsing', () => {
   it('delivers multiline chunks before the done event', async () => {
     setActivePinia(createPinia())
     const chunks: string[] = []
+    const encoder = new TextEncoder()
+    let controller!: ReadableStreamDefaultController<Uint8Array>
+    let streamClosed = false
+    const body = new ReadableStream<Uint8Array>({
+      start(streamController) {
+        controller = streamController
+      },
+    })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
-      'data: 第一段\ndata: \ndata: 第二段\n\nevent: done\ndata: [DONE]\n\n',
+      body,
       { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
     )))
 
+    const request = streamApi('/stream/test', (chunk) => chunks.push(chunk))
     try {
-      await streamApi('/stream/test', (chunk) => chunks.push(chunk))
+      controller.enqueue(encoder.encode('data: 第一段\ndata: \ndata: 第二段\n\n'))
+      await vi.waitFor(() => {
+        expect(chunks).toEqual(['第一段\n\n第二段'])
+      })
+
+      controller.enqueue(encoder.encode('event: done\ndata: [DONE]\n\n'))
+      controller.close()
+      streamClosed = true
+      await request
     } finally {
+      if (!streamClosed) controller.close()
       vi.unstubAllGlobals()
     }
-
-    expect(chunks).toEqual(['第一段\n\n第二段'])
   })
 })
 

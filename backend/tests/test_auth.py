@@ -13,6 +13,8 @@ from app.models import AssistantConversation, AssistantMessage, Document, Docume
 
 
 def setup_module() -> None:
+    if engine.url.get_backend_name() != "sqlite":
+        raise RuntimeError("认证测试只允许清理 SQLite 测试数据库。")
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 

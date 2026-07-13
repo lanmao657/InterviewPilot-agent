@@ -9,3 +9,9 @@ def test_application_startup_does_not_create_tables_outside_alembic() -> None:
 
     assert "create_all" not in main
     assert "Base.metadata" not in main
+
+
+def test_test_suite_uses_isolated_sqlite_database() -> None:
+    from app.core.database import engine
+
+    assert engine.url.get_backend_name() == "sqlite"
